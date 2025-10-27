@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: flex_desal_analysis
-Version: 0.0.0
-Description-Content-Type: text/markdown
-Requires-Dist: watertap-reflo>=0.3.0rc0
-
-open command prompt and from location of this repo execute:
-conda env create -f flex_desal_analysis_setup.yml
