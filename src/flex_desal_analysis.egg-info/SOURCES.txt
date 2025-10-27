@@ -1,7 +1,0 @@
-README.md
-pyproject.toml
-src/flex_desal_analysis.egg-info/PKG-INFO
-src/flex_desal_analysis.egg-info/SOURCES.txt
-src/flex_desal_analysis.egg-info/dependency_links.txt
-src/flex_desal_analysis.egg-info/requires.txt
-src/flex_desal_analysis.egg-info/top_level.txt
