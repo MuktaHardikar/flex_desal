@@ -3,5 +3,5 @@ name = "flex_desal_analysis"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    "watertap-reflo>=0.3.0rc0"
+    "watertap-reflo>=0.2"
 ]
