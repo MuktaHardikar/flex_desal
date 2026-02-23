@@ -192,12 +192,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 units=pyunits.m * (pyunits.m**3 / pyunits.s) ** (-2),
             )
 
-            self.efficiency_adjustment_factor = Param(
-                initialize=0,
-                doc="Adjustment factor for design_efficiency_constraint, reducing pump efficiency at lower speeds.",
-                units=pyunits.dimensionless,
-            )
-
             # Constraints connecting inlet and outlet conditions to the design point head and flow, used to solve for the system curve constants
             @self.Constraint(
                 doc="Design head is the pressure difference across the pump at the design point"
@@ -414,12 +408,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             # Expression to calculate the efficiency at the design point based as a function of speed fraction
             @self.Constraint(doc="Design efficiency calculation")
             def design_efficiency_constraint(b):
-                return (
-                    b.design_efficiency
-                    == b.ref_efficiency
-                    * (b.design_speed_fraction / b.ref_speed_fraction)
-                    ** b.efficiency_adjustment_factor
-                )
+                return b.design_efficiency == b.ref_efficiency
 
             @self.Constraint(
                 doc="Overall efficiency calculation including motor efficiency and VFD efficiency"
