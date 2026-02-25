@@ -5,6 +5,7 @@ from pyomo.environ import (
     assert_optimal_termination,
     units as pyunits,
     value,
+    Reals,
 )
 from idaes.core import FlowsheetBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
@@ -316,7 +317,7 @@ def test_ro_feed_pump():
 
 
 @pytest.mark.unit
-def test_uf_pump():
+def test_low_speed():
     # Doubles as low speed (50%) test
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
@@ -375,3 +376,72 @@ def test_uf_pump():
     assert_optimal_termination(results)
 
     assert m.fs.unit.efficiency_pump[0].value == pytest.approx(0.64, abs=0.02)
+
+
+@pytest.mark.unit
+def test_negative_inlet_pressure():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    m.fs.unit = Pump(
+        property_package=m.fs.properties,
+        variable_efficiency=Efficiency.Flow,
+        pump_curve_data_type=PumpCurveDataType.DataSet,
+        pump_curves=os.path.join(
+            os.path.dirname(__file__),
+            "test_pump_curves_data_uf.csv",
+        ),
+    )
+
+    # Input flow and head for initial solve
+    feed_flow_vol = (
+        0.21 * pyunits.m**3 / pyunits.s
+    )  # Actual flow vol will be calculated in second solve
+    density = 1000 * pyunits.kg / pyunits.m**3
+    feed_pressure_in = -12 * pyunits.psi  # 101325 * pyunits.Pa
+
+    m.fs.unit.control_volume.properties_in[0].pressure.setlb(None)
+    m.fs.unit.control_volume.properties_in[0].pressure.domain = Reals
+
+    feed_pressure_out = 50 * pyunits.psi
+    feed_mass_frac_TDS = 0.0005
+    feed_temperature = 298.15
+    geometric_head = pyunits.convert(
+        12 * pyunits.psi / (density * 9.81 * pyunits.m / pyunits.s**2),
+        to_units=pyunits.m,
+    )
+
+    # Fix pump characteristics
+    m.fs.unit.system_curve_geometric_head.fix(geometric_head)
+    m.fs.unit.ref_speed_fraction.fix(1.0)
+    m.fs.unit.inlet.pressure[0].fix(feed_pressure_in)
+    m.fs.unit.inlet.temperature[0].fix(feed_temperature)
+    m.fs.unit.outlet.pressure[0].fix(feed_pressure_out)
+
+    # Calculated feed conditions
+    feed_flow_mass = feed_flow_vol * density
+    feed_mass_frac_H2O = 1 - feed_mass_frac_TDS
+    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "TDS"].fix(
+        feed_flow_mass * feed_mass_frac_TDS
+    )
+    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].fix(
+        feed_flow_mass * feed_mass_frac_H2O
+    )
+    calculate_scaling_factors(m)
+    m.fs.unit.initialize()
+    assert degrees_of_freedom(m) == 0
+
+    solver = get_solver()
+    test_pump_speed = 0.91
+    m.fs.unit.design_speed_fraction.fix(test_pump_speed)
+    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].unfix()
+    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "TDS"].unfix()
+    m.fs.unit.control_volume.properties_in[0].mass_frac_phase_comp["Liq", "TDS"].fix()
+    calculate_scaling_factors(m)
+    results = solver.solve(m)
+    assert_optimal_termination(results)
+
+    assert value(
+        pyunits.convert(m.fs.unit.work_mechanical[0], to_units=pyunits.kW)
+    ) == pytest.approx(166.54, rel=1e-3)
