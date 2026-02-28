@@ -34,6 +34,11 @@ Pump curves can be provided in two ways:
 	- User provides cubic polynomial coefficients for head and efficiency as dictionaries.
 	- Example: ``{0: a, 1: b, 2: c, 3: d}`` for ``head = a + b*flow + c*flow^2 + d*flow^3``.
 
+The figure below illustrates an example pump head and efficiency curves. It also shows the design point of unknown efficiency, but known head and flowrate. 
+.. image:: detailed_pump_inputs_example.png
+   :alt: Detailed pump inputs example
+   :align: center
+
 Variables and Parameters
 -----------------------
 - ``design_flow``: Design flowrate (m³/s).
@@ -74,6 +79,11 @@ Constraints
 - Reference point constraints: Solve system and pump curve simultaneously.
 - Overall efficiency: Combines pump, motor, and VFD efficiency.
 
+
+The figure below illustrates the system curve and pump performance curves. Their intersection represents the reference operating point, which has the same effiency as the design operating point.
+.. image:: detailed_pump_equations_example.png
+   :alt: Detailed pump inputs example
+   :align: center
 
 References
 ----------
