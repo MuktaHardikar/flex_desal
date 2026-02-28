@@ -69,6 +69,7 @@ where:
 	- :math:`Q`: Volumetric flow rate (m³/s)
 
 In the model, these are represented by the variables ``system_curve_geometric_head`` (for :math:`H_{static}`) and ``system_curve_flow_constant`` (for :math:`K`). The system curve is used to determine the required pump head for a given flow rate and is essential for matching the pump performance to the process requirements.
+Pump efficiency is assumed to be constant along the system curve because the hydraulic frictional scale losses scale proportionally to kinetic energy. For large speed deviations from the known operating curves, descrepancies in this assumption will become more significant. 
 
 Constraints
 -----------
@@ -89,6 +90,7 @@ References
 ----------
 - WaterTAP core and costing modules
 - IDAES core and unit models
+- Pump information: https://users.metu.edu.tr/csert/me306/ME%20306%20Part%203%20Turbomachinery.pdf
 
 
 Variables to Fix for 0 Degrees of Freedom
@@ -119,3 +121,4 @@ To achieve zero degrees of freedom (DOF) and enable the model to solve, the foll
 	- ``deltaP``
 
 These settings ensure the model is fully specified and ready for initialization and solving. See the test file for example code.
+Note that when head and speed are specified, (unknown flowrate), the pump model will need to be first initialized with an estimated flowrate. Then unfix the flowrate, fix speed and solve again. An example is provided in the test file.
