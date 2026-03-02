@@ -348,9 +348,6 @@ def test_negative_inlet_pressure():
     density = 1000 * pyunits.kg / pyunits.m**3
     feed_pressure_in = -12 * pyunits.psi  # 101325 * pyunits.Pa
 
-    m.fs.unit.control_volume.properties_in[0].pressure.setlb(None)
-    m.fs.unit.control_volume.properties_in[0].pressure.domain = Reals
-
     feed_pressure_out = 50 * pyunits.psi
     feed_mass_frac_TDS = 0.0005
     feed_temperature = 298.15
@@ -413,6 +410,7 @@ def test_invalid_surrogate_coefficients():
             efficiency_surrogate_coeffs={0: 0.389, 1: -0.535},
         )
 
+
 # Test an invalid filepath name
 @pytest.mark.component
 def test_invalid_filepath():
@@ -451,6 +449,7 @@ def test_missing_filepath_for_dataset_mode():
         )
 
 
+# Test with variable_efficiency not assigned using proper class
 @pytest.mark.component
 def test_invalid_efficiency_type():
     m = ConcreteModel()
@@ -468,8 +467,9 @@ def test_invalid_efficiency_type():
         )
 
 
+# Test surrogate mode selected but no surrogate coefficients provided
 @pytest.mark.component
-def test_missing_surrogates():
+def test_missing_surrogate_values():
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()

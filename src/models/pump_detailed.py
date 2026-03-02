@@ -9,6 +9,7 @@ from pyomo.environ import (
     check_optimal_termination,
     value,
     units as pyunits,
+    Reals,
 )
 from pyomo.common.config import ConfigValue, In
 
@@ -184,6 +185,10 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 This could be the speed fraction at the best efficiency point (BEP) or user selected operating point.""",
                 units=pyunits.dimensionless,
             )
+
+            # Allow for negative inlet pump pressures
+            self.control_volume.properties_in[0].pressure.setlb(None)
+            self.control_volume.properties_in[0].pressure.domain = Reals
 
             ### System curve variables ###
             # design_head = system_curve_geometric_head +  system_curve_flow_constant * (design_flow)**2
@@ -468,7 +473,25 @@ class PumpIsothermalData(InitializationMixin, PumpData):
         init_log.info("Initialization Complete: {}".format(idaeslog.condition(res)))
 
         if not check_optimal_termination(res):
-            raise InitializationError(f"Unit model {self.name} failed to initialize")
+            # It's possible initialization fails if the initial flowrate     
+            # if m.fs.unit.design_speed_fraction.fixed and m.fs.unit.design_head.fixed:
+            #     design_speed = m.fs.unit.design_speed_fraction.value
+            #     m.fs.unit.design_speed_fraction.unfix()
+            #     m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].fix(m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].value * .75)
+            #     m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "TDS"].fix(m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "TDS"].value * .75)
+            #     m.fs.unit.control_volume.properties_in[0].mass_frac_phase_comp["Liq", "TDS"].unfix() # This should remain fixed the whole time, but unfixing b/c it might cause property model to fail.
+            #     with idaeslog.solver_log(solve_log, idaeslog.DEBUG) as slc:
+            #         res = opt.solve(self, tee=slc.tee)
+            #     # Then refix speed, try again
+            #     m.fs.unit.design_speed_fraction.fix(design_speed)
+            #     m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].unfix()
+            #     with idaeslog.solver_log(solve_log, idaeslog.DEBUG) as slc:
+            #         res = opt.solve(self, tee=slc.tee)
+            #     if not check_optimal_termination(res):
+            #         raise InitializationError(f"Unit model {self.name} failed to initialize")
+            # else:
+                raise InitializationError(f"Unit model {self.name} failed to initialize")
+
 
     def calculate_scaling_factors(self):
         super().calculate_scaling_factors()
