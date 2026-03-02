@@ -1,32 +1,26 @@
-from networkx import config
 import pandas as pd
-from numpy import polyfit
-from pyomo.environ import (
-    Suffix,
-    check_optimal_termination,
-    RangeSet,
-)
-from watertap.core.solvers import get_solver
-
-from pyomo.common.config import ConfigValue, In
-from pyomo.environ import Var, Param, Set, units as pyunits, Expr_if, value
-
-from idaes.core.util.config import DefaultBool
 from enum import Enum, auto
+from numpy import polyfit
 
-# Import IDAES cores
+from pyomo.environ import (
+    Var,
+    Param,
+    Set,
+    check_optimal_termination,
+    value,
+    units as pyunits,
+)
+from pyomo.common.config import ConfigValue, In
+
 from idaes.models.unit_models.pressure_changer import PumpData
 from idaes.core import declare_process_block_class
-import idaes.core.util.scaling as iscale
 from idaes.core.util.exceptions import InitializationError
 from idaes.core.util.exceptions import ConfigurationError
 import idaes.logger as idaeslog
 
 from watertap.core import InitializationMixin
 from watertap.costing.unit_models.pump import cost_pump
-from watertap.costing.unit_models.energy_recovery_device import (
-    cost_energy_recovery_device,
-)
+from watertap.core.solvers import get_solver
 
 _log = idaeslog.getLogger(__name__)
 
