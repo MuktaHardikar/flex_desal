@@ -14,6 +14,7 @@ from pyomo.common.config import ConfigValue, In
 
 from idaes.models.unit_models.pressure_changer import PumpData
 from idaes.core import declare_process_block_class
+from idaes.core.util.constants import Constants
 from idaes.core.util.exceptions import InitializationError
 from idaes.core.util.exceptions import ConfigurationError
 import idaes.logger as idaeslog
@@ -23,6 +24,34 @@ from watertap.costing.unit_models.pump import cost_pump
 from watertap.core.solvers import get_solver
 
 _log = idaeslog.getLogger(__name__)
+
+
+def _validate_curve_data(filepath):
+    if isinstance(filepath, str):
+        try:
+            df = pd.read_csv(filepath)
+        except Exception as e:
+            raise ValueError(f"Failed to read CSV file '{filepath}': {e}")
+        required_cols = ["flow (m3/s)", "head (m)", "efficiency (-)"]
+        if all(col in df.columns for col in required_cols):
+            return df
+        raise ValueError(
+            f"CSV file must contain columns: {required_cols}, but found: {list(df.columns)}"
+        )
+    raise ValueError("Must be a string filepath to a CSV file")
+
+
+def _validate_surrogate_coeffs(coeffs):
+    if not isinstance(coeffs, dict):
+        raise ValueError("Surrogate coefficients must be provided as a dictionary.")
+
+    expected_keys = {0, 1, 2, 3}
+    if set(coeffs.keys()) != expected_keys:
+        raise ValueError(
+            "Surrogate coefficient keys must be exactly {0, 1, 2, 3}."
+        )
+
+    return coeffs
 
 
 class Efficiency(Enum):
@@ -48,32 +77,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     * This allows for more accurate representation of pump performance under varying operating conditions.
     """
 
-    def _validate_curve_data(filepath):
-        if isinstance(filepath, str):
-            try:
-                df = pd.read_csv(filepath)
-            except Exception as e:
-                raise ValueError(f"Failed to read CSV file '{filepath}': {e}")
-            required_cols = ["flow (m3/s)", "head (m)", "efficiency (-)"]
-            if all(col in df.columns for col in required_cols):
-                return df
-            raise ValueError(
-                f"CSV file must contain columns: {required_cols}, but found: {list(df.columns)}"
-            )
-        raise ValueError("Must be a string filepath to a CSV file")
 
-
-    def _validate_surrogate_coeffs(coeffs):
-        if not isinstance(coeffs, dict):
-            raise ValueError("Surrogate coefficients must be provided as a dictionary.")
-
-        expected_keys = {0, 1, 2, 3}
-        if set(coeffs.keys()) != expected_keys:
-            raise ValueError(
-                "Surrogate coefficient keys must be exactly {0, 1, 2, 3}."
-            )
-
-        return coeffs
 
     CONFIG = PumpData.CONFIG()
 
@@ -203,9 +207,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             def design_head_constraint(b):
                 return b.design_head == b.control_volume.deltaP[0] / (
                     b.control_volume.properties_out[0].dens_mass_phase["Liq"]
-                    * 9.81
-                    * pyunits.m
-                    / pyunits.s**2
+                    * Constants.acceleration_gravity
                 )
 
             @self.Constraint(
@@ -474,3 +476,4 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     @property
     def default_costing_method(self):
         return cost_pump
+    

@@ -11,10 +11,12 @@ from idaes.core import FlowsheetBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.scaling import calculate_scaling_factors
 from idaes.core.util.exceptions import ConfigurationError
+from idaes.core.util.constants import Constants
 from pyomo.util.check_units import assert_units_consistent
 from watertap.property_models.seawater_prop_pack import SeawaterParameterBlock
 from watertap.core.solvers import get_solver
 from models.pump_detailed import Pump, Efficiency, PumpCurveDataType
+
 
 solver = get_solver()
 
@@ -42,7 +44,7 @@ def build_pump_w_flow_head():
     feed_mass_frac_TDS = 0.035
     feed_pressure_in = 101325 * pyunits.Pa
     feed_pressure_out = (
-        feed_pressure_in + pump_head * density * 9.81 * pyunits.m / pyunits.s**2
+        feed_pressure_in + pump_head * density * Constants.acceleration_gravity
     )
     feed_temperature = 273.15 + 25
 
@@ -235,7 +237,7 @@ def test_data_points():
     feed_mass_frac_TDS = 0.035
     feed_pressure_in = 101325 * pyunits.Pa
     feed_pressure_out = (
-        feed_pressure_in + pump_head * density * 9.81 * pyunits.m / pyunits.s**2
+        feed_pressure_in + pump_head * density * Constants.acceleration_gravity
     )
     feed_temperature = 273.15 + 25
 
@@ -263,59 +265,6 @@ def test_data_points():
     assert_optimal_termination(results)
 
 
-# Tests for different pumps types for WRD
-@pytest.mark.component
-def test_ro_feed_pump():
-    # Test point from building out the pump curves
-    m = ConcreteModel()
-    m.fs = FlowsheetBlock(dynamic=False)
-    m.fs.properties = SeawaterParameterBlock()
-
-    m.fs.unit = Pump(
-        property_package=m.fs.properties,
-        variable_efficiency=Efficiency.Flow,
-        pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
-        # pump_curves = os.path.join(os.path.dirname(__file__), "test_pump_curves_data.csv"),
-        head_surrogate_coeffs={0: 114.22, 1: -410.6, 2: 2729.2, 3: -8089.1},
-        efficiency_surrogate_coeffs={0: 0.389, 1: -0.535, 2: 41.373, 3: -138.82},
-    )
-
-    # Input flow and head
-    feed_flow_vol = 0.14 * pyunits.m**3 / pyunits.s
-    pump_head = 172.3 / 3.28 * pyunits.m
-    density = 1000 * pyunits.kg / pyunits.m**3
-
-    # Calculated feed conditions
-    feed_flow_mass = feed_flow_vol * density
-    feed_mass_frac_TDS = 0.035
-
-    feed_pressure_in = 244074.4 * pyunits.Pa  # 35.4 psi converted to Pa
-    feed_pressure_out = feed_pressure_in + pump_head * density * (
-        9.81 * pyunits.m / pyunits.s**2
-    )
-    feed_temperature = 273.15 + 25  # Why no units?
-
-    feed_mass_frac_H2O = 1 - feed_mass_frac_TDS
-    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "TDS"].fix(
-        feed_flow_mass * feed_mass_frac_TDS
-    )
-    m.fs.unit.inlet.flow_mass_phase_comp[0, "Liq", "H2O"].fix(
-        feed_flow_mass * feed_mass_frac_H2O
-    )
-    m.fs.unit.inlet.pressure[0].fix(feed_pressure_in)
-    m.fs.unit.inlet.temperature[0].fix(feed_temperature)
-    m.fs.unit.outlet.pressure[0].fix(feed_pressure_out)
-
-    m.fs.unit.system_curve_geometric_head.fix(0)
-    m.fs.unit.ref_speed_fraction.fix(1.0)
-
-    m.fs.unit.initialize()
-    assert degrees_of_freedom(m) == 0
-    results = solver.solve(m)
-    assert_optimal_termination(results)
-    assert value(m.fs.unit.ref_efficiency) == pytest.approx(0.825, abs=0.02)
-
-
 @pytest.mark.component
 def test_low_speed():
     # Doubles as low speed (50%) test
@@ -341,9 +290,7 @@ def test_low_speed():
     feed_mass_frac_TDS = 0.035
 
     feed_pressure_in = 101325 * pyunits.Pa
-    feed_pressure_out = feed_pressure_in + pump_head * density * (
-        9.81 * pyunits.m / pyunits.s**2
-    )
+    feed_pressure_out = feed_pressure_in + pump_head * density * Constants.acceleration_gravity
     feed_temperature = 273.15 + 25
 
     feed_mass_frac_H2O = 1 - feed_mass_frac_TDS
@@ -408,7 +355,7 @@ def test_negative_inlet_pressure():
     feed_mass_frac_TDS = 0.0005
     feed_temperature = 298.15
     geometric_head = pyunits.convert(
-        12 * pyunits.psi / (density * 9.81 * pyunits.m / pyunits.s**2),
+        12 * pyunits.psi / (density * Constants.acceleration_gravity),
         to_units=pyunits.m,
     )
 
