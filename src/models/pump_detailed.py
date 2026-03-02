@@ -71,6 +71,20 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             )
         raise ValueError("Must be a string filepath to a CSV file or None")
 
+    def _validate_surrogate_coeffs(coeffs):
+        if coeffs is None:
+            return coeffs
+        if not isinstance(coeffs, dict):
+            raise ValueError("Surrogate coefficients must be provided as a dictionary.")
+
+        expected_keys = {0, 1, 2, 3}
+        if set(coeffs.keys()) != expected_keys:
+            raise ValueError(
+                "Surrogate coefficient keys must be exactly {0, 1, 2, 3}."
+            )
+
+        return coeffs
+
     CONFIG = PumpData.CONFIG()
 
     CONFIG.declare(
@@ -100,8 +114,8 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     CONFIG.declare(
         "head_surrogate_coeffs",
         ConfigValue(
-            default={},
-            domain=dict,
+            default=None,
+            domain=_validate_surrogate_coeffs,
             description="Surrogate coefficients for the pump head curve based on flow only",
             doc="""Coefficients for the pump head curve surrogate based on flow only. 
             The head is calculated as a function of flow using a cubic polynomial with these coefficients.""",
@@ -111,8 +125,8 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     CONFIG.declare(
         "efficiency_surrogate_coeffs",
         ConfigValue(
-            default={},
-            domain=dict,
+            default=None,
+            domain=_validate_surrogate_coeffs,
             description="Surrogate coefficients for the pump efficiency curve based on flow only",
             doc="""Coefficients for the pump efficiency curve surrogate based on flow only. 
             The efficiency is calculated as a function of flow using a cubic polynomial with these coefficients.""",
@@ -266,38 +280,28 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             if self.config.pump_curve_data_type == PumpCurveDataType.DataSet:
                 # Read the dataset file path and create a constraint to fit the surrogate coefficients based on the dataset provided by the user
+                self.surrogate_index = Set(initialize = range(4),
+                                           doc="Index for surrogate coefficients for a cubic polynomial fit")
 
-                # Add the fit order
-                self.fit_order = Param(
-                    initialize=3,
-                    doc="Order of the polynomial fit for the surrogate pump curve coefficients",
-                    units=pyunits.dimensionless,
-                )
-
-                self.surrogate_index = Set(
-                    initialize=range(value(self.fit_order) + 1),
-                    doc="Index for surrogate coefficients",
-                )
                 # pump_curves is converted from a filepath name to DataFrame from the validator
                 curves_df = self.config.pump_curves
 
                 p_head = polyfit(
                     curves_df["flow (m3/s)"],
                     curves_df["head (m)"],
-                    value(self.fit_order),
+                    3,
                 )
                 p_eff = polyfit(
                     curves_df["flow (m3/s)"],
                     curves_df["efficiency (-)"],
-                    value(self.fit_order),
+                    3,
                 )
-
                 head_surrogate_coeffs = {
-                    i: float(p_head[value(self.fit_order) - i])
+                    i: float(p_head[3 - i])
                     for i in self.surrogate_index
                 }
                 efficiency_surrogate_coeffs = {
-                    i: float(p_eff[value(self.fit_order) - i])
+                    i: float(p_eff[3 - i])
                     for i in self.surrogate_index
                 }
 
@@ -317,15 +321,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 self.surrogate_index = Set(
                     initialize=[0, 1, 2, 3], doc="Index for surrogate coefficients"
                 )
-
-                if list(self.config.head_surrogate_coeffs.keys()) != [0, 1, 2, 3]:
-                    raise ValueError(
-                        "head_surrogate_coeffs keys must match the surrogate_index set [0,1,2,3] where each key corresponds to the coefficient corespond to the order of each term. Ex: {0: 10, 1: 2, 2: 0.5, 3: 0.1} corresponds to the surrogate curve: = 10 + 2*flow + 0.5*flow^2 + 0.1*flow^3"
-                    )
-                if list(self.config.efficiency_surrogate_coeffs.keys()) != [0, 1, 2, 3]:
-                    raise ValueError(
-                        "efficiency_surrogate_coeffs keys must match the surrogate_index set [0,1,2,3] where each key corresponds to the coefficient corespond to the order of each term. Ex: {0: 10, 1: 2, 2: 0.5, 3: 0.1} corresponds to the surrogate curve: = 10 + 2*flow + 0.5*flow^2 + 0.1*flow^3"
-                    )
 
                 head_surrogate_coeffs = self.config.head_surrogate_coeffs
                 efficiency_surrogate_coeffs = self.config.efficiency_surrogate_coeffs

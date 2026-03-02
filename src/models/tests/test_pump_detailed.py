@@ -17,7 +17,6 @@ from models.pump_detailed import Pump, Efficiency, PumpCurveDataType
 
 solver = get_solver()
 
-
 # Build function with design flow and head as inputs
 def build_pump_w_flow_head():
     m = ConcreteModel()
@@ -109,7 +108,7 @@ def build_pump_w_flow_speed():
     return m
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_fixed_eff_pump():
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
@@ -154,7 +153,7 @@ def test_fixed_eff_pump():
 
 
 # Three tests for different combinations of inputs for variable efficiency
-@pytest.mark.unit
+@pytest.mark.component
 def test_pump_w_flow_head():
     m = build_pump_w_flow_head()
 
@@ -170,7 +169,7 @@ def test_pump_w_flow_head():
     assert_optimal_termination(results)
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_pump_w_flow_speed():
     m = build_pump_w_flow_speed()
 
@@ -186,7 +185,7 @@ def test_pump_w_flow_speed():
     assert_optimal_termination(results)
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_pump_w_head_speed():
     m = build_pump_w_flow_head()
 
@@ -208,7 +207,7 @@ def test_pump_w_head_speed():
 
 
 # Test for passing a dataset for the pump curves
-@pytest.mark.unit
+@pytest.mark.component
 def test_data_points():
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
@@ -264,7 +263,7 @@ def test_data_points():
 
 
 # Tests for different pumps types for WRD
-@pytest.mark.unit
+@pytest.mark.component
 def test_ro_feed_pump():
     # Test point from building out the pump curves
     m = ConcreteModel()
@@ -316,7 +315,7 @@ def test_ro_feed_pump():
     assert value(m.fs.unit.ref_efficiency) == pytest.approx(0.825, abs=0.02)
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_low_speed():
     # Doubles as low speed (50%) test
     m = ConcreteModel()
@@ -378,7 +377,7 @@ def test_low_speed():
     assert m.fs.unit.efficiency_pump[0].value == pytest.approx(0.64, abs=0.02)
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_negative_inlet_pressure():
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
@@ -445,3 +444,23 @@ def test_negative_inlet_pressure():
     assert value(
         pyunits.convert(m.fs.unit.work_mechanical[0], to_units=pyunits.kW)
     ) == pytest.approx(166.54, rel=1e-3)
+
+
+# Test an invalid surrogate coefficient case
+@pytest.mark.component
+def test_invalid_surrogate_coefficients():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    with pytest.raises(
+        ValueError,
+        match=r"Surrogate coefficient keys must be exactly \{0, 1, 2, 3\}\.",
+    ):
+        m.fs.unit = Pump(
+            property_package=m.fs.properties,
+            variable_efficiency=Efficiency.Flow,
+            pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
+            head_surrogate_coeffs={0: 114.22, 1: -410.6, 2: 2729.2},
+            efficiency_surrogate_coeffs={0: 0.389, 1: -0.535},
+        )
