@@ -19,7 +19,7 @@ from idaes.models.unit_models.pressure_changer import PumpData
 from idaes.core import declare_process_block_class
 import idaes.core.util.scaling as iscale
 from idaes.core.util.exceptions import InitializationError
-
+from idaes.core.util.exceptions import ConfigurationError
 import idaes.logger as idaeslog
 
 from watertap.core import InitializationMixin
@@ -55,25 +55,21 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     """
 
     def _validate_curve_data(filepath):
-        if filepath is None:
-            return filepath
         if isinstance(filepath, str):
             try:
                 df = pd.read_csv(filepath)
             except Exception as e:
                 raise ValueError(f"Failed to read CSV file '{filepath}': {e}")
-
             required_cols = ["flow (m3/s)", "head (m)", "efficiency (-)"]
             if all(col in df.columns for col in required_cols):
                 return df
             raise ValueError(
                 f"CSV file must contain columns: {required_cols}, but found: {list(df.columns)}"
             )
-        raise ValueError("Must be a string filepath to a CSV file or None")
+        raise ValueError("Must be a string filepath to a CSV file")
+
 
     def _validate_surrogate_coeffs(coeffs):
-        if coeffs is None:
-            return coeffs
         if not isinstance(coeffs, dict):
             raise ValueError("Surrogate coefficients must be provided as a dictionary.")
 
@@ -280,6 +276,11 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             if self.config.pump_curve_data_type == PumpCurveDataType.DataSet:
                 # Read the dataset file path and create a constraint to fit the surrogate coefficients based on the dataset provided by the user
+                if self.config.pump_curves is None:
+                    raise ConfigurationError(
+                        "pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet."
+                    )
+
                 self.surrogate_index = Set(initialize = range(4),
                                            doc="Index for surrogate coefficients for a cubic polynomial fit")
 
@@ -314,7 +315,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                     not self.config.head_surrogate_coeffs
                     or not self.config.efficiency_surrogate_coeffs
                 ):
-                    raise ValueError(
+                    raise ConfigurationError(
                         "surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent."
                     )
 
@@ -326,9 +327,11 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 efficiency_surrogate_coeffs = self.config.efficiency_surrogate_coeffs
 
             else:
-                raise ValueError(
-                    "Invalid pump curve data type specified. Must be either DataSet or SurrogateCoefficent."
-                )
+                # Not sure this error could ever occur unless PumpCurveDataType is altered
+                # raise ConfigurationError(
+                #     "Invalid pump curve data type specified. Must be either DataSet or SurrogateCoefficent."
+                # )
+                pass
 
             # Also would be nice for fit to be in terms of ft and gpm, or m and m3/hr or m3/s
             # Note: Coefficients are dimensionless because they're applied to flow in m³/s (numeric value)
@@ -420,9 +423,11 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             pass
 
         else:
-            raise ValueError(
-                "Invalid variable efficiency option specified. Must be either VariableEfficiency.Fixed or VariableEfficiency.Flow."
-            )
+            # Not sure this error could ever occur unless Efficiency enum is altered
+            # raise ConfigurationError(
+            #     "Invalid variable efficiency option specified. Must be either VariableEfficiency.Fixed or VariableEfficiency.Flow."
+            # )
+            pass
 
     def initialize_build(
         self,

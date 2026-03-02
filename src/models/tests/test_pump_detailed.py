@@ -10,6 +10,7 @@ from pyomo.environ import (
 from idaes.core import FlowsheetBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.scaling import calculate_scaling_factors
+from idaes.core.util.exceptions import ConfigurationError
 from pyomo.util.check_units import assert_units_consistent
 from watertap.property_models.seawater_prop_pack import SeawaterParameterBlock
 from watertap.core.solvers import get_solver
@@ -464,3 +465,75 @@ def test_invalid_surrogate_coefficients():
             head_surrogate_coeffs={0: 114.22, 1: -410.6, 2: 2729.2},
             efficiency_surrogate_coeffs={0: 0.389, 1: -0.535},
         )
+
+# Test an invalid filepath name
+@pytest.mark.component
+def test_invalid_filepath():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    with pytest.raises(
+        ValueError,
+        match=r"Failed to read CSV file '.*': .*",
+    ):
+        m.fs.unit = Pump(
+            property_package=m.fs.properties,
+            variable_efficiency=Efficiency.Flow,
+            pump_curve_data_type=PumpCurveDataType.DataSet,
+            pump_curves=os.path.join(os.path.dirname(__file__), "DNE.csv"),
+        )
+
+
+# Test missing filepath for dataset mode
+@pytest.mark.component
+def test_missing_filepath_for_dataset_mode():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet\.",
+    ):
+        m.fs.unit = Pump(
+            property_package=m.fs.properties,
+            variable_efficiency=Efficiency.Flow,
+            pump_curve_data_type=PumpCurveDataType.DataSet,
+            pump_curves=None,
+        )
+
+
+@pytest.mark.component
+def test_invalid_efficiency_type():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    with pytest.raises(
+        ValueError,
+        match="'InvalidType' is not a valid Efficiency",
+    ):
+        m.fs.unit = Pump(
+            property_package=m.fs.properties,
+            variable_efficiency="InvalidType",
+            pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
+        )
+
+
+@pytest.mark.component
+def test_missing_surrogates():
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    m.fs.properties = SeawaterParameterBlock()
+
+    with pytest.raises(
+        ConfigurationError,
+        match="surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent.",
+    ):
+        m.fs.unit = Pump(
+            property_package=m.fs.properties,
+            variable_efficiency=Efficiency.Flow,
+            pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
+        )
+
