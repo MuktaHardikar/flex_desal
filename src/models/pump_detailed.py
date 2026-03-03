@@ -48,9 +48,7 @@ def _validate_surrogate_coeffs(coeffs):
 
     expected_keys = {0, 1, 2, 3}
     if set(coeffs.keys()) != expected_keys:
-        raise ValueError(
-            "Surrogate coefficient keys must be exactly {0, 1, 2, 3}."
-        )
+        raise ValueError("Surrogate coefficient keys must be exactly {0, 1, 2, 3}.")
 
     return coeffs
 
@@ -77,8 +75,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     * The model includes options for defining the pump curve based on flow and head at the BEP, as well as scaling the efficiency curve accordingly.
     * This allows for more accurate representation of pump performance under varying operating conditions.
     """
-
-
 
     CONFIG = PumpData.CONFIG()
 
@@ -156,7 +152,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             #### Design point variables ####
             self.design_flow = Var(
                 initialize=1.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="""Design flowrate of the centrifugal pump. 
                 This could be the flowrate at the best efficiency point (BEP) or user selected operating point.
                 Used to build the system curve.""",
@@ -165,7 +161,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             self.design_head = Var(
                 initialize=1.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="""Design head of the centrifugal pump. 
                 This could be the head at the best efficiency point (BEP) or user selected operating point.
                 Used to build the system curve.""",
@@ -197,14 +193,14 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             self.system_curve_geometric_head = Var(
                 initialize=0.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="""Geometric head constant for the pump, that represents the static head component used to define the system curve.""",
                 units=pyunits.m,
             )
 
             self.system_curve_flow_constant = Var(
                 initialize=1.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="""Geometric flow constant for the pump, represents the major and minor losses in pump. Used to define the system curve.""",
                 units=pyunits.m * (pyunits.m**3 / pyunits.s) ** (-2),
             )
@@ -240,14 +236,14 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             #### Pump curve variables ####
             self.ref_flow = Var(
                 initialize=1.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="Reference flowrate for the pump on the pump curve from specification sheet",
                 units=pyunits.m**3 / pyunits.s,
             )
 
             self.ref_head = Var(
                 initialize=10.0,
-                bounds = (0, 10000),
+                bounds=(0, 10000),
                 doc="Reference head for the pump on the pump curve from specification sheet.",
                 units=pyunits.m,
             )
@@ -288,8 +284,10 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                         "pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet."
                     )
 
-                self.surrogate_index = Set(initialize = range(4),
-                                           doc="Index for surrogate coefficients for a cubic polynomial fit")
+                self.surrogate_index = Set(
+                    initialize=range(4),
+                    doc="Index for surrogate coefficients for a cubic polynomial fit",
+                )
 
                 # pump_curves is converted from a filepath name to DataFrame from the validator
                 curves_df = self.config.pump_curves
@@ -305,12 +303,10 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                     3,
                 )
                 head_surrogate_coeffs = {
-                    i: float(p_head[3 - i])
-                    for i in self.surrogate_index
+                    i: float(p_head[3 - i]) for i in self.surrogate_index
                 }
                 efficiency_surrogate_coeffs = {
-                    i: float(p_eff[3 - i])
-                    for i in self.surrogate_index
+                    i: float(p_eff[3 - i]) for i in self.surrogate_index
                 }
 
             elif (
@@ -479,7 +475,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
         init_log.info("Initialization Complete: {}".format(idaeslog.condition(res)))
 
         if not check_optimal_termination(res):
-            # It's possible initialization fails if the initial flowrate     
+            # It's possible initialization fails if the initial flowrate
             # if m.fs.unit.design_speed_fraction.fixed and m.fs.unit.design_head.fixed:
             #     design_speed = m.fs.unit.design_speed_fraction.value
             #     m.fs.unit.design_speed_fraction.unfix()
@@ -496,8 +492,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             #     if not check_optimal_termination(res):
             #         raise InitializationError(f"Unit model {self.name} failed to initialize")
             # else:
-                raise InitializationError(f"Unit model {self.name} failed to initialize")
-
+            raise InitializationError(f"Unit model {self.name} failed to initialize")
 
     def calculate_scaling_factors(self):
         super().calculate_scaling_factors()
@@ -505,4 +500,3 @@ class PumpIsothermalData(InitializationMixin, PumpData):
     @property
     def default_costing_method(self):
         return cost_pump
-    

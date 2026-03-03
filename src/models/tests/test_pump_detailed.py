@@ -20,6 +20,7 @@ from models.pump_detailed import PumpDetailed, Efficiency, PumpCurveDataType
 
 solver = get_solver()
 
+
 # Build function with design flow and head as inputs
 def build_pump_w_flow_head():
     m = ConcreteModel()
@@ -290,7 +291,9 @@ def test_low_speed():
     feed_mass_frac_TDS = 0.035
 
     feed_pressure_in = 101325 * pyunits.Pa
-    feed_pressure_out = feed_pressure_in + pump_head * density * Constants.acceleration_gravity
+    feed_pressure_out = (
+        feed_pressure_in + pump_head * density * Constants.acceleration_gravity
+    )
     feed_temperature = 273.15 + 25
 
     feed_mass_frac_H2O = 1 - feed_mass_frac_TDS
@@ -483,4 +486,3 @@ def test_missing_surrogate_values():
             variable_efficiency=Efficiency.Flow,
             pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
         )
-
