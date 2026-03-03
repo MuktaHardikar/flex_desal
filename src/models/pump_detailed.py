@@ -26,6 +26,7 @@ from watertap.core.solvers import get_solver
 
 _log = idaeslog.getLogger(__name__)
 
+
 # ------- Validation functions ----------------------
 def _validate_curve_data(filepath):
     if isinstance(filepath, str):
@@ -51,7 +52,10 @@ def _validate_surrogate_coeffs(coeffs):
         raise ValueError("Surrogate coefficient keys must be exactly {0, 1, 2, 3}.")
 
     return coeffs
+
+
 # --------------------------------------------------
+
 
 # ---------- Enums for configuration options ----------
 class Efficiency(Enum):
@@ -64,6 +68,7 @@ class PumpCurveDataType(Enum):
     # user provides flow, head, and efficiency data to fit a curve and surrogate coefficients are calculated via polyfit
     SurrogateCoefficent = auto()
     # curve fit correlation based on flow and head is provided by the user as surrogate coefficients.
+
 
 # --------------------------------------------------
 
@@ -155,6 +160,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                     raise ConfigurationError(
                         "surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent."
                     )
+
     # -----------------------------------------------
 
     def build(self):

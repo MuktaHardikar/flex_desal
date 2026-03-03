@@ -16,7 +16,7 @@ from idaes.core.util.scaling import calculate_scaling_factors
 from pyomo.util.check_units import assert_units_consistent
 from watertap.property_models.seawater_prop_pack import SeawaterParameterBlock
 from watertap.core.solvers import get_solver
-from models.pump_detailed import Pump, Efficiency, PumpCurveDataType
+from models.pump_detailed import PumpDetailed, Efficiency, PumpCurveDataType
 
 solver = get_solver()
 
@@ -27,7 +27,7 @@ def test_uf_pump_8_19_full_speed():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -104,7 +104,7 @@ def test_uf_pump_8_19_low_speed():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.DataSet,
