@@ -26,7 +26,7 @@ from watertap.core.solvers import get_solver
 
 _log = idaeslog.getLogger(__name__)
 
-
+# ------- Validation functions ----------------------
 def _validate_curve_data(filepath):
     if isinstance(filepath, str):
         try:
@@ -51,8 +51,9 @@ def _validate_surrogate_coeffs(coeffs):
         raise ValueError("Surrogate coefficient keys must be exactly {0, 1, 2, 3}.")
 
     return coeffs
+# --------------------------------------------------
 
-
+# ---------- Enums for configuration options ----------
 class Efficiency(Enum):
     Fixed = auto()  # default is constant efficiency
     Flow = auto()  # flow-only correlation
@@ -63,6 +64,8 @@ class PumpCurveDataType(Enum):
     # user provides flow, head, and efficiency data to fit a curve and surrogate coefficients are calculated via polyfit
     SurrogateCoefficent = auto()
     # curve fit correlation based on flow and head is provided by the user as surrogate coefficients.
+
+# --------------------------------------------------
 
 
 @declare_process_block_class("PumpDetailed")
@@ -134,8 +137,29 @@ class PumpIsothermalData(InitializationMixin, PumpData):
         ),
     )
 
+    def _validate_config(self):
+        if self.config.variable_efficiency is Efficiency.Flow:
+            if self.config.pump_curve_data_type == PumpCurveDataType.DataSet:
+                if self.config.pump_curves is None:
+                    raise ConfigurationError(
+                        "pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet."
+                    )
+            elif (
+                self.config.pump_curve_data_type
+                == PumpCurveDataType.SurrogateCoefficent
+            ):
+                if (
+                    not self.config.head_surrogate_coeffs
+                    or not self.config.efficiency_surrogate_coeffs
+                ):
+                    raise ConfigurationError(
+                        "surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent."
+                    )
+    # -----------------------------------------------
+
     def build(self):
         super().build()
+        self._validate_config()
 
         # Isothermal pump set up
         if hasattr(self.control_volume, "enthalpy_balances"):
@@ -278,12 +302,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             )
 
             if self.config.pump_curve_data_type == PumpCurveDataType.DataSet:
-                # Read the dataset file path and create a constraint to fit the surrogate coefficients based on the dataset provided by the user
-                if self.config.pump_curves is None:
-                    raise ConfigurationError(
-                        "pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet."
-                    )
-
                 self.surrogate_index = Set(
                     initialize=range(4),
                     doc="Index for surrogate coefficients for a cubic polynomial fit",
@@ -313,15 +331,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 self.config.pump_curve_data_type
                 == PumpCurveDataType.SurrogateCoefficent
             ):
-                # Surrogate coefficients based on flow only for head and efficiency calculation
-                if (
-                    not self.config.head_surrogate_coeffs
-                    or not self.config.efficiency_surrogate_coeffs
-                ):
-                    raise ConfigurationError(
-                        "surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent."
-                    )
-
                 self.surrogate_index = Set(
                     initialize=[0, 1, 2, 3], doc="Index for surrogate coefficients"
                 )
@@ -329,14 +338,8 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 head_surrogate_coeffs = self.config.head_surrogate_coeffs
                 efficiency_surrogate_coeffs = self.config.efficiency_surrogate_coeffs
 
-            else:
-                # Not sure this error could ever occur unless PumpCurveDataType is altered
-                # raise ConfigurationError(
-                #     "Invalid pump curve data type specified. Must be either DataSet or SurrogateCoefficent."
-                # )
-                pass
-
             # Also would be nice for fit to be in terms of ft and gpm, or m and m3/hr or m3/s
+
             # Note: Coefficients are dimensionless because they're applied to flow in m³/s (numeric value)
             # The polynomial produces head in meters
             self.head_surrogate_coefficients = Param(
@@ -422,14 +425,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
         elif self.config.variable_efficiency is Efficiency.Fixed:
             # Fixed efficiency pump set-up (efficiency is constant at the best efficiency point)
-            # If fixed efficiency, user should directly fix efficiency_pump[0] and deltaP
-            pass
-
-        else:
-            # Not sure this error could ever occur unless Efficiency enum is altered
-            # raise ConfigurationError(
-            #     "Invalid variable efficiency option specified. Must be either VariableEfficiency.Fixed or VariableEfficiency.Flow."
-            # )
+            # User should directly fix efficiency_pump[0] and deltaP
             pass
 
     def initialize_build(
