@@ -67,7 +67,7 @@ class PumpCurveDataType(Enum):
     # curve fit correlation based on flow and head is provided by the user as surrogate coefficients.
 
 
-@declare_process_block_class("Pump")
+@declare_process_block_class("PumpDetailed")
 class PumpIsothermalData(InitializationMixin, PumpData):
     """
     Detailed Isothermal Pump Unit Model Class
@@ -156,6 +156,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             #### Design point variables ####
             self.design_flow = Var(
                 initialize=1.0,
+                bounds = (0, 10000),
                 doc="""Design flowrate of the centrifugal pump. 
                 This could be the flowrate at the best efficiency point (BEP) or user selected operating point.
                 Used to build the system curve.""",
@@ -164,6 +165,7 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             self.design_head = Var(
                 initialize=1.0,
+                bounds = (0, 10000),
                 doc="""Design head of the centrifugal pump. 
                 This could be the head at the best efficiency point (BEP) or user selected operating point.
                 Used to build the system curve.""",
@@ -195,12 +197,14 @@ class PumpIsothermalData(InitializationMixin, PumpData):
 
             self.system_curve_geometric_head = Var(
                 initialize=0.0,
+                bounds = (0, 10000),
                 doc="""Geometric head constant for the pump, that represents the static head component used to define the system curve.""",
                 units=pyunits.m,
             )
 
             self.system_curve_flow_constant = Var(
                 initialize=1.0,
+                bounds = (0, 10000),
                 doc="""Geometric flow constant for the pump, represents the major and minor losses in pump. Used to define the system curve.""",
                 units=pyunits.m * (pyunits.m**3 / pyunits.s) ** (-2),
             )
@@ -236,12 +240,14 @@ class PumpIsothermalData(InitializationMixin, PumpData):
             #### Pump curve variables ####
             self.ref_flow = Var(
                 initialize=1.0,
+                bounds = (0, 10000),
                 doc="Reference flowrate for the pump on the pump curve from specification sheet",
                 units=pyunits.m**3 / pyunits.s,
             )
 
             self.ref_head = Var(
                 initialize=10.0,
+                bounds = (0, 10000),
                 doc="Reference head for the pump on the pump curve from specification sheet.",
                 units=pyunits.m,
             )

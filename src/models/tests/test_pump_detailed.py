@@ -15,7 +15,7 @@ from idaes.core.util.constants import Constants
 from pyomo.util.check_units import assert_units_consistent
 from watertap.property_models.seawater_prop_pack import SeawaterParameterBlock
 from watertap.core.solvers import get_solver
-from models.pump_detailed import Pump, Efficiency, PumpCurveDataType
+from models.pump_detailed import PumpDetailed, Efficiency, PumpCurveDataType
 
 
 solver = get_solver()
@@ -26,7 +26,7 @@ def build_pump_w_flow_head():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
@@ -72,7 +72,7 @@ def build_pump_w_flow_speed():
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
@@ -117,7 +117,7 @@ def test_fixed_eff_pump():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Fixed,
     )
@@ -219,7 +219,7 @@ def test_data_points():
         os.path.dirname(__file__), "test_pump_curves_data.csv"
     )
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -272,7 +272,7 @@ def test_low_speed():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -331,7 +331,7 @@ def test_negative_inlet_pressure():
     m.fs = FlowsheetBlock(dynamic=False)
     m.fs.properties = SeawaterParameterBlock()
 
-    m.fs.unit = Pump(
+    m.fs.unit = PumpDetailed(
         property_package=m.fs.properties,
         variable_efficiency=Efficiency.Flow,
         pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -402,7 +402,7 @@ def test_invalid_surrogate_coefficients():
         ValueError,
         match=r"Surrogate coefficient keys must be exactly \{0, 1, 2, 3\}\.",
     ):
-        m.fs.unit = Pump(
+        m.fs.unit = PumpDetailed(
             property_package=m.fs.properties,
             variable_efficiency=Efficiency.Flow,
             pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
@@ -422,7 +422,7 @@ def test_invalid_filepath():
         ValueError,
         match=r"Failed to read CSV file '.*': .*",
     ):
-        m.fs.unit = Pump(
+        m.fs.unit = PumpDetailed(
             property_package=m.fs.properties,
             variable_efficiency=Efficiency.Flow,
             pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -441,7 +441,7 @@ def test_missing_filepath_for_dataset_mode():
         ConfigurationError,
         match=r"pump_curves must be provided as a CSV filepath when pump_curve_data_type is DataSet\.",
     ):
-        m.fs.unit = Pump(
+        m.fs.unit = PumpDetailed(
             property_package=m.fs.properties,
             variable_efficiency=Efficiency.Flow,
             pump_curve_data_type=PumpCurveDataType.DataSet,
@@ -460,7 +460,7 @@ def test_invalid_efficiency_type():
         ValueError,
         match="'InvalidType' is not a valid Efficiency",
     ):
-        m.fs.unit = Pump(
+        m.fs.unit = PumpDetailed(
             property_package=m.fs.properties,
             variable_efficiency="InvalidType",
             pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
@@ -478,7 +478,7 @@ def test_missing_surrogate_values():
         ConfigurationError,
         match="surrogate_coeffs must be provided for the pump head curve and efficiency curve when pump_curve_data_type is set to SurrogateCoefficent.",
     ):
-        m.fs.unit = Pump(
+        m.fs.unit = PumpDetailed(
             property_package=m.fs.properties,
             variable_efficiency=Efficiency.Flow,
             pump_curve_data_type=PumpCurveDataType.SurrogateCoefficent,
