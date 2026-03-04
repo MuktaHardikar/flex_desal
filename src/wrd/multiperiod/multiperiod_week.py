@@ -220,7 +220,6 @@ def build_wrd_flowsheet(
         ) / b.fs.total_water_production
 
     
-
     m.fs.acc_production = Var(
         initialize=0,
         bounds=(0, None),
@@ -369,10 +368,6 @@ def create_wrd_mp(
     m.fs.non_working_hours_morning = [h for h in range(n_time_points) if (h % 24) in non_working_hours_morning]
     m.fs.non_working_hours_evening = [h for h in range(n_time_points) if (h % 24) in non_working_hours_evening]
 
-    # m.fs.non_working_hours = non_working_hours
-    # m.fs.working_hours = working_hours
-
-    
     # Constraints to keep production constant during non-working hours (skip at transitions)
     @m.Constraint(m.fs.non_working_hours_morning, doc="Production constant during non-working hours")
     def eq_non_working_hrs_morning(b, h):
@@ -380,15 +375,13 @@ def create_wrd_mp(
             return Constraint.Skip
         return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
     
-    # Constraints to keep production constant during non-working hours (skip at transitions)
     @m.Constraint(m.fs.non_working_hours_evening, doc="Production constant during non-working hours")
     def eq_non_working_hrs_evening(b, h):
         # if h == 16 or (h % 24)==16:
         #     return Constraint.Skip
         return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
     
-
-    # # Constraints to keep trains on/off state constant during non-working hours
+    
     # @m.Constraint(non_working_hours, doc="Train 1 on/off state constant during non-working hours")
     # def eq_train_1_on_nwh(b, h):
     #     if h == 0 or (h % 24) in [9, 16]:
@@ -413,11 +406,23 @@ def create_wrd_mp(
         #     return Constraint.Skip
         return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
 
-    @m.Constraint(doc="Production should not change at midnight")
-    def eq_midnight_constraint(b):
+    #Ensure train 4 turns off first before train 3
+    @m.Constraint(range(n_time_points), doc="Train 3 will always have the higher production than train 4")
+    def eq_train_3_over_train_4(b, i):
+        return b.fs.mp.blocks[i].process.fs.water_production_ro_train_3 >= b.fs.mp.blocks[i].process.fs.water_production_ro_train_4
+
+    @m.Constraint(range(n_time_points), doc="Train 3 must be on for train 4 to be on")
+    def eq_train_3_on_train_4_on(b, i):
+        return b.fs.mp.blocks[i].process.fs.train_3_on >= b.fs.mp.blocks[i].process.fs.train_4_on
+
+    # Constraints across midnight every day
+    @m.Constraint(range(n_time_points), doc="Production should not change at midnight")
+    def eq_midnight_constraint(b, h):
+        if h == 0 or (h % 24) != 0:
+            return Constraint.Skip
         return (
-            b.fs.mp.blocks[0].process.fs.total_water_production
-            == b.fs.mp.blocks[23].process.fs.total_water_production
+            b.fs.mp.blocks[h].process.fs.total_water_production
+            == b.fs.mp.blocks[h - 1].process.fs.total_water_production
         )
 
     @m.Expression(doc="Total cost")
@@ -540,7 +545,7 @@ if __name__ == "__main__":
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 12 * pyunits.m**3/pyunits.day * n_days * pyunits.day
+    total_water_production_target = 13 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
     season = "winter"
     # season = 'summer'
