@@ -1,10 +1,12 @@
 import numpy as np
+import os
 import pandas as pd
 import logging
 import matplotlib.pyplot as plt
 
 # Pyomo imports
 from pyomo.environ import ConcreteModel, Var, Param, units as pyunits, Objective
+from pyomo.util.check_units import assert_units_consistent
 import matplotlib.dates as mdates
 
 from idaes.core import FlowsheetBlock
@@ -17,6 +19,14 @@ from idaes.apps.grid_integration.multiperiod.multiperiod import MultiPeriodModel
 from idaes.core.solvers.get_solver import get_solver
 import idaes.logger as idaeslog
 from pyomo.environ import SolverFactory
+
+if hasattr(pyunits, "USD_2021"):
+    CURRENCY_UNIT = pyunits.USD_2021
+elif hasattr(pyunits, "USD"):
+    CURRENCY_UNIT = pyunits.USD
+else:
+    pyunits.load_definitions_from_strings(["USD = [currency]"])
+    CURRENCY_UNIT = pyunits.USD
 
 # Based on rates in 2021 from GRIP Cost Tracker
 # Based on rates in 2021 from GRIP Cost Tracker
@@ -123,6 +133,20 @@ def build_wrd_flowsheet(
     
     m.fs = FlowsheetBlock(dynamic=False)
 
+    m.fs.time_step = Param(
+        initialize=1,
+        mutable=True,
+        units=pyunits.h,
+        doc="Duration of each multiperiod time block",
+    )
+
+    m.fs.electricity_price = Param(
+        initialize=elec_price,
+        mutable=True,
+        units=CURRENCY_UNIT / pyunits.kWh,
+        doc="Electricity price for the current time block",
+    )
+
     total_plant_production_capacity = 14.8 / 24  # m3 per hour
     train_production_capacity = total_plant_production_capacity / 4  # m3 per hour per train
 
@@ -200,7 +224,8 @@ def build_wrd_flowsheet(
 
     # Function to calculate energy consumption per m3 of water treated. 
     def calculate_energy_intensity(flow):
-        return (2E-06*flow**2 - 0.0026*flow + 1.1007)
+       return (5E-06*flow/(pyunits.m**3/pyunits.hr) + 1.1) * pyunits.kWh/pyunits.m**3
+        # return (2E-06*flow**2 - 0.0026*flow + 1.1007)
 
 
     m.fs.treatment_energy_per_m3 = Var(
@@ -251,24 +276,34 @@ def build_wrd_flowsheet(
     m.fs.grid_cost = Var(
         initialize=0,
         bounds=(0, None),
-        units=pyunits.dimensionless,
+        units=CURRENCY_UNIT,
         doc="Electricity cost for each time step",
     )
 
     @m.Constraint(doc="Constraint to accumulate water production")
     def eq_acc_water_prod(b):
-        return b.fs.acc_production == b.fs.pre_acc_production + b.fs.total_water_production
+        return (
+            b.fs.acc_production
+            == b.fs.pre_acc_production + b.fs.total_water_production * b.fs.time_step
+        )
 
     @m.Constraint(doc="Constraint to calculate total energy consumption")
     def eq_acc_energy(b):
         return (
             b.fs.acc_energy
-            == b.fs.pre_acc_energy + b.fs.total_water_production * b.fs.treatment_energy_per_m3
+            == b.fs.pre_acc_energy
+            + b.fs.total_water_production * b.fs.treatment_energy_per_m3 * b.fs.time_step
         )
 
     @m.Constraint(doc="Grid cost")
     def eq_grid_cost(b):
-        return b.fs.grid_cost == elec_price * b.fs.total_water_production * b.fs.treatment_energy_per_m3
+        return (
+            b.fs.grid_cost
+            == b.fs.electricity_price
+            * b.fs.total_water_production
+            * b.fs.treatment_energy_per_m3
+            * b.fs.time_step
+        )
 
     return m
 
@@ -381,7 +416,7 @@ def create_wrd_mp(
         #     return Constraint.Skip
         return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
     
-    
+    # # Constraints to keep trains on/off state constant during non-working hours
     # @m.Constraint(non_working_hours, doc="Train 1 on/off state constant during non-working hours")
     # def eq_train_1_on_nwh(b, h):
     #     if h == 0 or (h % 24) in [9, 16]:
@@ -446,7 +481,13 @@ def create_wrd_mp(
     @m.Constraint(doc="Total production")
     def total_production(b):
         return (
-            sum([b.fs.mp.blocks[i].process.fs.total_water_production for i in range(n_time_points)])
+            sum(
+                [
+                    b.fs.mp.blocks[i].process.fs.total_water_production
+                    * b.fs.mp.blocks[i].process.fs.time_step
+                    for i in range(n_time_points)
+                ]
+            )
             >= pyunits.convert(total_water_production_target, to_units=pyunits.m**3)
         )
 
@@ -562,13 +603,24 @@ if __name__ == "__main__":
         daily_production_target=daily_production_target,
         total_water_production_target=total_water_production_target,
     )
-
+    assert_units_consistent(m)
     # print_unfixed_vars(m)
 
     # solver = get_solver()
-    solver = SolverFactory('mindtpy')
-    results = solver.solve(m)
+    # solver = SolverFactory('mindtpy')
+    # results = solver.solve(m)
+    os.environ['PATH'] = r'C:\Users\rchurchi\AppData\Local\anaconda3\pkgs\glpk-4.65-h17947e8_4\Library\bin' + os.pathsep + os.environ.get('PATH', '')
 
+    # dt = DiagnosticsToolbox(m) 
+
+    solver = SolverFactory("mindtpy")
+    results = solver.solve(
+        m,
+        strategy="FP",
+        mip_solver="glpk",
+        nlp_solver="ipopt",
+        tee=True,
+    )
     prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
     energy = [
         value(
