@@ -464,16 +464,36 @@ def create_wrd_mp(
     def eq_train_3_on_train_4_on(b, i):
         return b.fs.mp.blocks[i].process.fs.train_3_on >= b.fs.mp.blocks[i].process.fs.train_4_on
 
-    # Constraints across midnight every day 
-    # There's some issue when this constraint is added, but the results don't seem to validate it.
-    # @m.Constraint(range(n_time_points), doc="Production should not change at midnight")
-    # def eq_midnight_constraint(b, h):
-    #     if h == 0 or (h % 23) != 0:
+    # # Constraint disallowing off state for only one hour
+    # @m.Constraint(range(n_time_points), doc="Trains cannot be on for only one hour")
+    # def eq_no_one_hour_on_train3(b, i):
+    #     if i < 2:
     #         return Constraint.Skip
-    #     return (
-    #         b.fs.mp.blocks[h].process.fs.water_production_ro_train_3
-    #         == b.fs.mp.blocks[h - 1].process.fs.water_production_ro_train_3
-    #     )
+    #     return b.fs.mp.blocks[i].process.fs.train_3_on * b.fs.mp.blocks[i - 1].process.fs.train_3_on >= b.fs.mp.blocks[i].process.fs.train_3_on - b.fs.mp.blocks[i-2].process.fs.train_3_on
+
+    # @m.Constraint(range(n_time_points), doc="Trains cannot be on for only one hour")
+    # def eq_no_one_hour_on_train4(b, i):
+    #     if i < 2:
+    #         return Constraint.Skip
+    #     return b.fs.mp.blocks[i].process.fs.train_4_on * b.fs.mp.blocks[i - 1].process.fs.train_4_on >= b.fs.mp.blocks[i].process.fs.train_4_on - b.fs.mp.blocks[i-2].process.fs.train_4_on
+
+    @m.Constraint(range(1, n_time_points - 1), doc="Disallow on-off-on pattern for train 3")
+    def eq_no_on_off_on_train3(b, i):
+        return (
+            b.fs.mp.blocks[i - 1].process.fs.train_3_on
+            + b.fs.mp.blocks[i + 1].process.fs.train_3_on
+            - b.fs.mp.blocks[i].process.fs.train_3_on
+            <= 1
+        )
+
+    @m.Constraint(range(1, n_time_points - 1), doc="Disallow on-off-on pattern for train 4")
+    def eq_no_on_off_on_train4(b, i):
+        return (
+            b.fs.mp.blocks[i - 1].process.fs.train_4_on
+            + b.fs.mp.blocks[i + 1].process.fs.train_4_on
+            - b.fs.mp.blocks[i].process.fs.train_4_on
+            <= 1
+        )
 
     # @m.Constraint(range(n_time_points), doc="Production should not change at midnight")
     # def eq_midnight_constraint_on_off(b, h):
