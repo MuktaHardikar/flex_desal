@@ -639,14 +639,13 @@ def print_unfixed_vars(model):
 
 
 if __name__ == "__main__":
-
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
     total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
-    season = "winter"
-    # season = 'summer'
+    # season = "winter"
+    season = 'summer'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)

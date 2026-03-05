@@ -94,13 +94,13 @@ def build_elec_price_summer(n):
 
 def build_elec_price_winter(n):
     # Delivery Pricing
-    on_peak_del = 0
+    on_peak_del = 0 # No on peak hours in winter
     mid_peak_del = 0.0239
     off_peak_del = 0.0228
     super_off_peak_del = 0.022137
 
     # Generation Pricing $/kWh
-    on_peak_gen = 0
+    on_peak_gen = 0 # No on peak hours in winter
     mid_peak_gen = 0.07663
     off_peak_gen = 0.06397
     super_off_peak_gen = 0.04026
@@ -631,6 +631,32 @@ def plot_function(m, n_time_points, season):
     plt.show()
 
 
+def plot_grid_cost_over_time(m, n_time_points, season=None):
+    time = np.arange(n_time_points)
+    grid_cost = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.grid_cost,
+                to_units=CURRENCY_UNIT,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(time + 0.5, grid_cost, marker="o", linewidth=1.5, color="tab:green")
+    ax.set_xlabel("Hours")
+    ax.set_ylabel("Grid Cost (2021 $/hr)")
+    title = "Grid Cost Over Time"
+    if season is not None:
+        title = f"{title} - {season.capitalize()}"
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
+    fig.tight_layout()
+    plt.show()
+
+
 def print_unfixed_vars(model):
     print("Unfixed variables contributing to degrees of freedom:")
     for v in model.component_data_objects(ctype=Var, descend_into=True):
@@ -645,8 +671,8 @@ if __name__ == "__main__":
     daily_production_target = 0 * pyunits.m**3/pyunits.day
     total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
-    season = "winter"
-    # season = 'summer'
+    # season = "winter"
+    season = 'summer'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
@@ -697,5 +723,6 @@ if __name__ == "__main__":
     print("Total energy cost:", m.total_cost(), "2021 $")
 
     plot_function(m, n_time_points, season)
+    plot_grid_cost_over_time(m, n_time_points, season)
 
     
