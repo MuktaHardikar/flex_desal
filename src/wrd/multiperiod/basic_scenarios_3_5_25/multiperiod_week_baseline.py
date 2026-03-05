@@ -224,8 +224,8 @@ def build_wrd_flowsheet(
 
     # Function to calculate energy consumption per m3 of water treated. 
     def calculate_energy_intensity(flow):
-       return (5E-06*flow/(pyunits.m**3/pyunits.hr) + 1.1) * pyunits.kWh/pyunits.m**3
-        # return (2E-06*flow**2 - 0.0026*flow + 1.1007)
+       # Valid only between perm flowrates of 490 and 562 m3/hr
+       return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
 
 
     m.fs.treatment_energy_rate = Var(
@@ -473,7 +473,7 @@ def plot_function(m, n_time_points, season):
     ax2 = ax.twinx()
     ax2.plot(time + 0.5, energy, label="Energy Consumption", color="orange", marker="o")
     ax2.spines["right"].set_position(("outward", 55))
-    ax2.set_ylim(0, 3500)
+    ax2.set_ylim(0, 2500)
 
     if season == "summer":
         for i in range(int(n_time_points/24)):
