@@ -228,21 +228,29 @@ def build_wrd_flowsheet(
         # return (2E-06*flow**2 - 0.0026*flow + 1.1007)
 
 
-    m.fs.treatment_energy_per_m3 = Var(
-        initialize=0.48,
-        units=pyunits.kWh / pyunits.m**3,
-        doc="Total treatment energy required per m3",
+    m.fs.treatment_energy_rate = Var(
+        initialize=0,
+        bounds=(0, None),
+        units=pyunits.kWh / pyunits.h,
+        doc="Total treatment energy required per hour",
     )
 
-    # Constraint to calculate treatment energy per m3 based on flow through each train
-    @m.Constraint(doc="Calculate treatment energy per m3")
-    def eq_treatment_energy_per_m3(b):
-        return b.fs.treatment_energy_per_m3 == (
-            calculate_energy_intensity(b.fs.water_production_ro_train_1) * b.fs.water_production_ro_train_1 * b.fs.train_1_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_2) * b.fs.water_production_ro_train_2 * b.fs.train_2_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_3) * b.fs.water_production_ro_train_3 * b.fs.train_3_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_4) * b.fs.water_production_ro_train_4 * b.fs.train_4_on
-        ) / b.fs.total_water_production
+    @m.Constraint(doc="Calculate total treatment energy rate")
+    def eq_treatment_energy_rate(b):
+        return b.fs.treatment_energy_rate == (
+            calculate_energy_intensity(b.fs.water_production_ro_train_1)
+            * b.fs.water_production_ro_train_1
+            * b.fs.train_1_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_2)
+            * b.fs.water_production_ro_train_2
+            * b.fs.train_2_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_3)
+            * b.fs.water_production_ro_train_3
+            * b.fs.train_3_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_4)
+            * b.fs.water_production_ro_train_4
+            * b.fs.train_4_on
+        )
 
     
     m.fs.acc_production = Var(
@@ -292,7 +300,7 @@ def build_wrd_flowsheet(
         return (
             b.fs.acc_energy
             == b.fs.pre_acc_energy
-            + b.fs.total_water_production * b.fs.treatment_energy_per_m3 * b.fs.time_step
+            + b.fs.treatment_energy_rate * b.fs.time_step
         )
 
     @m.Constraint(doc="Grid cost")
@@ -300,8 +308,7 @@ def build_wrd_flowsheet(
         return (
             b.fs.grid_cost
             == b.fs.electricity_price
-            * b.fs.total_water_production
-            * b.fs.treatment_energy_per_m3
+            * b.fs.treatment_energy_rate
             * b.fs.time_step
         )
 
@@ -668,8 +675,11 @@ if __name__ == "__main__":
     prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
     energy = [
         value(
-            pyunits.convert(m.fs.mp.blocks[i].process.fs.total_water_production, to_units=pyunits.m**3/pyunits.h)
-        * m.fs.mp.blocks[i].process.fs.treatment_energy_per_m3 )
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.treatment_energy_rate,
+                to_units=pyunits.kWh / pyunits.h,
+            )
+        )
         for i in range(n_time_points)
     ]
     

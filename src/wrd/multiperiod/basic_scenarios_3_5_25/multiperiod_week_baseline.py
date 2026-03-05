@@ -152,7 +152,7 @@ def build_wrd_flowsheet(
 
     m.fs.total_water_production = Var(
         initialize = total_plant_production_capacity,
-        bounds = (total_plant_production_capacity / 2, total_plant_production_capacity),
+        bounds = (0, total_plant_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Water produced in a hour in m3",
     )
@@ -228,21 +228,29 @@ def build_wrd_flowsheet(
         # return (2E-06*flow**2 - 0.0026*flow + 1.1007)
 
 
-    m.fs.treatment_energy_per_m3 = Var(
-        initialize=0.48,
-        units=pyunits.kWh / pyunits.m**3,
-        doc="Total treatment energy required per m3",
+    m.fs.treatment_energy_rate = Var(
+        initialize=0,
+        bounds=(0, None),
+        units=pyunits.kWh / pyunits.h,
+        doc="Total treatment energy required per hour",
     )
 
-    # Constraint to calculate treatment energy per m3 based on flow through each train
-    @m.Constraint(doc="Calculate treatment energy per m3")
-    def eq_treatment_energy_per_m3(b):
-        return b.fs.treatment_energy_per_m3 == (
-            calculate_energy_intensity(b.fs.water_production_ro_train_1) * b.fs.water_production_ro_train_1 * b.fs.train_1_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_2) * b.fs.water_production_ro_train_2 * b.fs.train_2_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_3) * b.fs.water_production_ro_train_3 * b.fs.train_3_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_4) * b.fs.water_production_ro_train_4 * b.fs.train_4_on
-        ) / b.fs.total_water_production
+    @m.Constraint(doc="Calculate total treatment energy rate")
+    def eq_treatment_energy_rate(b):
+        return b.fs.treatment_energy_rate == (
+            calculate_energy_intensity(b.fs.water_production_ro_train_1)
+            * b.fs.water_production_ro_train_1
+            * b.fs.train_1_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_2)
+            * b.fs.water_production_ro_train_2
+            * b.fs.train_2_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_3)
+            * b.fs.water_production_ro_train_3
+            * b.fs.train_3_on
+            + calculate_energy_intensity(b.fs.water_production_ro_train_4)
+            * b.fs.water_production_ro_train_4
+            * b.fs.train_4_on
+        )
 
     
     m.fs.acc_production = Var(
@@ -292,7 +300,7 @@ def build_wrd_flowsheet(
         return (
             b.fs.acc_energy
             == b.fs.pre_acc_energy
-            + b.fs.total_water_production * b.fs.treatment_energy_per_m3 * b.fs.time_step
+            + b.fs.treatment_energy_rate * b.fs.time_step
         )
 
     @m.Constraint(doc="Grid cost")
@@ -300,8 +308,7 @@ def build_wrd_flowsheet(
         return (
             b.fs.grid_cost
             == b.fs.electricity_price
-            * b.fs.total_water_production
-            * b.fs.treatment_energy_per_m3
+            * b.fs.treatment_energy_rate
             * b.fs.time_step
         )
     return m
@@ -399,15 +406,29 @@ def create_wrd_mp(
     m.fs.mp.blocks[0].process.fs.pre_acc_production.fix(0)
     m.fs.mp.blocks[0].process.fs.pre_acc_energy.fix(0)
 
-    time_points_75 = range(int(0.75 * n_time_points))
-    time_points_25 = range(int(0.75 * n_time_points+1), n_time_points)
-    @m.Constraint(time_points_75,doc="Constraint force total production to maximum for frist 75% of the time period")
-    def eq_max_production_first_75_percent(b,i):
-        return b.fs.mp.blocks[i].process.fs.total_water_production == 53150 / 24 * pyunits.m**3 / pyunits.h
-    
-    # @m.Constraint(time_points_25, doc="Constraint to accumulate water production")
-    # def eq_off_production_last_25_percent(b,i):
-    #     return b.fs.mp.blocks[i].process.fs.total_water_production == 0
+    split_idx = int(0.75 * n_time_points)
+    time_points_75 = range(split_idx)
+    time_points_25 = range(split_idx, n_time_points)
+
+    @m.Constraint(time_points_75, doc="Force all four RO trains ON for first 75% of time periods")
+    def eq_all_trains_on_first_75_percent(b, i):
+        return (
+            b.fs.mp.blocks[i].process.fs.train_1_on
+            + b.fs.mp.blocks[i].process.fs.train_2_on
+            + b.fs.mp.blocks[i].process.fs.train_3_on
+            + b.fs.mp.blocks[i].process.fs.train_4_on
+            == 4
+        )
+
+    @m.Constraint(time_points_25, doc="Force all four RO trains OFF for last 25% of time periods")
+    def eq_all_trains_off_last_25_percent(b, i):
+        return (
+            b.fs.mp.blocks[i].process.fs.train_1_on
+            + b.fs.mp.blocks[i].process.fs.train_2_on
+            + b.fs.mp.blocks[i].process.fs.train_3_on
+            + b.fs.mp.blocks[i].process.fs.train_4_on
+            == 0
+        )
 
     @m.Expression(doc="Total cost")
     def total_cost(b):
