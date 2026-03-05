@@ -463,27 +463,29 @@ def plot_function(m, n_time_points, season):
     fig, (ax, ax_trains) = plt.subplots(2, 1, figsize=(10, 8))
     
     # First subplot: Total production, electricity price, and energy
-    ax.plot(time + 0.5, prod, label="Water Production (MG)", color="blue", marker="o")
-    ax.set_ylim(0, 20)
+    ax.plot(time + 0.5, prod, label="Water Production (m3/hr)", color="blue", marker="o")
+    ax.set_ylim(0, 3000)
     ax1 = ax.twinx()
 
     ax1.plot(time + 0.5, elec_price, label="Electricity Price", color="black", marker="o")
-    ax1.set_ylim(0, 0.5)
+    ax1.set_ylim(0, 0.4)
 
     ax2 = ax.twinx()
     ax2.plot(time + 0.5, energy, label="Energy Consumption", color="orange", marker="o")
     ax2.spines["right"].set_position(("outward", 55))
-    # ax2.set_ylim(0, 2000)
+    ax2.set_ylim(0, 3500)
 
     if season == "summer":
-        ax2.axvspan(0, 16, facecolor="lemonchiffon", alpha=0.3, label="Off Peak")
-        ax2.axvspan(16, 21, facecolor="gold", alpha=0.3, label="On Peak")
-        ax2.axvspan(21, 24, facecolor="lemonchiffon", alpha=0.3)
+        for i in range(int(n_time_points/24)):
+            ax2.axvspan(24*i, 24*i+16, facecolor="lemonchiffon", alpha=0.3, label="Off Peak" if i == 0 else "_nolegend_", zorder=0)
+            ax2.axvspan(24*i+16, 24*i+21, facecolor="gold", alpha=0.3, label="On Peak" if i == 0 else "_nolegend_", zorder=0)
+            ax2.axvspan(24*i+21, 24*i+24, facecolor="lemonchiffon", alpha=0.3, label = "_nolegend_", zorder=0)
     elif season == "winter":
-        ax2.axvspan(0, 8, facecolor="khaki", alpha=0.3, label="Off Peak")
-        ax2.axvspan(8, 16, facecolor="lemonchiffon", alpha=0.3, label="Super Off Peak")
-        ax2.axvspan(16, 21, facecolor="gold", alpha=0.3, label="Mid Peak")
-        ax2.axvspan(21, 24, facecolor="khaki", alpha=0.3)
+        for i in range(int(n_time_points/24)):
+            ax2.axvspan(24*i, 8 + 24*i, facecolor="khaki", alpha=0.3, label="Off Peak" if i == 0 else "_nolegend_", zorder=0)
+            ax2.axvspan(8 + 24*i, 16 + 24*i, facecolor="lemonchiffon", alpha=0.3, label="Super Off Peak" if i == 0 else "_nolegend_", zorder=0)
+            ax2.axvspan(16 + 24*i, 21 + 24*i, facecolor="gold", alpha=0.3, label="Mid Peak" if i == 0 else "_nolegend_", zorder=0)
+            ax2.axvspan(21 + 24*i, 24 + 24*i, facecolor="khaki", alpha=0.3, label = "_nolegend_", zorder=0)
 
     ax.axhline(y=53150 / 24, label="Maximum Production Capacity (m3/h)")
 
@@ -494,14 +496,19 @@ def plot_function(m, n_time_points, season):
     handles = handle + handle1 + handle2
     labels = label + label1 + label2
 
-    ax.legend(handles=handles, labels=labels, loc="upper right")
-
-    ax.set_ylabel("Water production (m3/h)")
-    ax1.set_ylabel("Electricity Price (2021 $/kWh)")
-    ax2.set_ylabel("Energy Consumption (kWh)")
+    leg = ax2.legend(handles=handles, labels=labels, loc="upper left", framealpha=1.0, ncol=2, fontsize=11)
+    leg.set_zorder(1000)
+    leg.get_frame().set_facecolor("white")   # optional, keeps it clean
+    ax.set_ylabel("Water production (m3/h)", fontsize=12)
+    ax1.set_ylabel("Electricity Price (2021 $/kWh)", fontsize=11)
+    ax2.set_ylabel("Energy Consumption (kWh)", fontsize=11)
     ax.xaxis.set_major_locator(plt.MaxNLocator(24))
-    ax.set_xlabel("Hours")
-    ax.set_title(season)
+    ax.set_xlabel("Hours", fontsize=12)
+    ax.set_title(season+ " Baseline Scenario", fontsize=14)
+    # Tick labels (all axes)
+    for a in (ax, ax1, ax2, ax_trains):
+        a.tick_params(axis="both", labelsize= 11)
+
 
     # Extract RO train flow rates and convert to % of max flow
     max_train_flow = 53150 / 24 / 4  # m3/hr
@@ -517,14 +524,15 @@ def plot_function(m, n_time_points, season):
     ax_trains.plot(time + 0.5, train_flows[2], label="RO Train 3", marker="^", linewidth=2)
     ax_trains.plot(time + 0.5, train_flows[3], label="RO Train 4", marker="d", linewidth=2)
     
-    ax_trains.set_ylabel("Flow Rate (% of Max)")
-    ax_trains.set_xlabel("Hours")
-    ax_trains.set_title("RO Train Flow Rates as % of Maximum")
+    ax_trains.set_ylabel("Flow Rate (% of Max)",fontsize=12)
+    ax_trains.set_xlabel("Hours", fontsize=12)
+    ax_trains.set_title("RO Train Flow Rates as % of Maximum", fontsize=14)
     ax_trains.set_ylim(0, 110)
-    ax_trains.axhline(y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity")
-    ax_trains.legend(loc="best")
+    ax_trains.axhline(y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity",zorder=0)
+    ax_trains.legend(loc="upper right", fontsize=11)
     ax_trains.grid(True, alpha=0.3)
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
+    ax_trains.tick_params(axis="both", labelsize= 11)
     fig.tight_layout()
     plt.show()
 
@@ -543,8 +551,8 @@ if __name__ == "__main__":
     daily_production_target = 0 * pyunits.m**3/pyunits.day
     total_water_production_target = 0.70 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day # 70 to give a bit of wiggle room
 
-    season = "winter"
-    # season = 'summer'
+    # season = "winter"
+    season = 'summer'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
@@ -579,8 +587,11 @@ if __name__ == "__main__":
     prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
     energy = [
         value(
-            pyunits.convert(m.fs.mp.blocks[i].process.fs.total_water_production, to_units=pyunits.m**3/pyunits.h)
-        * m.fs.mp.blocks[i].process.fs.treatment_energy_per_m3 )
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.treatment_energy_rate,
+                to_units=pyunits.kWh / pyunits.h,
+            )
+        )
         for i in range(n_time_points)
     ]
     
