@@ -223,10 +223,12 @@ def build_wrd_flowsheet(
     
 
     # Function to calculate energy consumption per m3 of water treated. 
-    def calculate_energy_intensity(flow):
+    def calculate_ro_energy_intensity(flow):
        # Valid only between perm flowrates of 490 and 562 m3/hr
        return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
 
+    def calculate_uf_energy_intensity(flow):
+        return 0.05 * pyunits.kWh/pyunits.m**3
 
     m.fs.treatment_energy_rate = Var(
         initialize=0,
@@ -238,16 +240,16 @@ def build_wrd_flowsheet(
     @m.Constraint(doc="Calculate total treatment energy rate")
     def eq_treatment_energy_rate(b):
         return b.fs.treatment_energy_rate == (
-            calculate_energy_intensity(b.fs.water_production_ro_train_1)
+            calculate_ro_energy_intensity(b.fs.water_production_ro_train_1)
             * b.fs.water_production_ro_train_1
             * b.fs.train_1_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_2)
+            + calculate_ro_energy_intensity(b.fs.water_production_ro_train_2)
             * b.fs.water_production_ro_train_2
             * b.fs.train_2_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_3)
+            + calculate_ro_energy_intensity(b.fs.water_production_ro_train_3)
             * b.fs.water_production_ro_train_3
             * b.fs.train_3_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_4)
+            + calculate_ro_energy_intensity(b.fs.water_production_ro_train_4)
             * b.fs.water_production_ro_train_4
             * b.fs.train_4_on
         )
@@ -450,17 +452,17 @@ def create_wrd_mp(
         return b.fs.mp.blocks[h].process.fs.train_3_on == b.fs.mp.blocks[h - 1].process.fs.train_3_on
     
     # Not sure if the below is really needed due to the eq_train_3_over_train_4 constraint.
-    # @m.Constraint(m.fs.non_working_hours_morning, doc="Train 4 on/off state constant during non-working hours")
-    # def eq_train_4_on_nwh_morning(b, h):
-    #     if h == 0: #or (h % 24)==0: --> this causes issues but idk why
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
+    @m.Constraint(m.fs.non_working_hours_morning, doc="Train 4 on/off state constant during non-working hours")
+    def eq_train_4_on_nwh_morning(b, h):
+        if h == 0: #or (h % 24)==0: --> this causes issues but idk why
+            return Constraint.Skip
+        return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
 
-    # @m.Constraint(m.fs.non_working_hours_evening, doc="Train 4 on/off state constant during non-working hours")
-    # def eq_train_4_on_nwh_evening(b, h):
-    #     if h == 0:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
+    @m.Constraint(m.fs.non_working_hours_evening, doc="Train 4 on/off state constant during non-working hours")
+    def eq_train_4_on_nwh_evening(b, h):
+        if h == 0:
+            return Constraint.Skip
+        return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
 
     # Ensure train 4 turns off first before train 3
     @m.Constraint(range(n_time_points), doc="Train 3 will always have the higher production than train 4")
@@ -598,7 +600,7 @@ def plot_function(m, n_time_points, season):
     ax2.set_ylabel("Energy Consumption (kWh)", fontsize=11)
     ax.xaxis.set_major_locator(plt.MaxNLocator(24))
     ax.set_xlabel("Hours", fontsize=12)
-    ax.set_title(season+ " Modular Shutdowns + Variable Flowrate Scenario", fontsize=14)
+    ax.set_title(season+ ": Modular Shutdown + Variable Flowrate Scenario", fontsize=14, fontweight="bold")
     # Tick labels (all axes)
     for a in (ax, ax1, ax2, ax_trains):
         a.tick_params(axis="both", labelsize= 11)
@@ -628,6 +630,7 @@ def plot_function(m, n_time_points, season):
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
     ax_trains.tick_params(axis="both", labelsize= 11)
     fig.tight_layout()
+    fig.savefig(f"wrd_{season}_modular_variable.png", dpi=600)
     plt.show()
 
 

@@ -225,6 +225,7 @@ def build_wrd_flowsheet(
     # Function to calculate energy consumption per m3 of water treated. 
     def calculate_energy_intensity(flow):
        # Valid only between perm flowrates of 490 and 562 m3/hr
+       # This value will be updated to include the UF pump energy intensity as well.
        return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
 
 
@@ -504,7 +505,7 @@ def plot_function(m, n_time_points, season):
     ax2.set_ylabel("Energy Consumption (kWh)", fontsize=11)
     ax.xaxis.set_major_locator(plt.MaxNLocator(24))
     ax.set_xlabel("Hours", fontsize=12)
-    ax.set_title(season+ " Baseline Scenario", fontsize=14)
+    ax.set_title(season+ ": Plant Shutdown Scenario", fontsize=14, fontweight="bold")
     # Tick labels (all axes)
     for a in (ax, ax1, ax2, ax_trains):
         a.tick_params(axis="both", labelsize= 11)
@@ -529,11 +530,12 @@ def plot_function(m, n_time_points, season):
     ax_trains.set_title("RO Train Flow Rates as % of Maximum", fontsize=14)
     ax_trains.set_ylim(0, 110)
     ax_trains.axhline(y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity",zorder=0)
-    ax_trains.legend(loc="upper right", fontsize=11)
+    ax_trains.legend(loc="lower left", fontsize=11)
     ax_trains.grid(True, alpha=0.3)
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
     ax_trains.tick_params(axis="both", labelsize= 11)
     fig.tight_layout()
+    fig.savefig(f"wrd_{season}_plant_shutdown.png", dpi=600)
     plt.show()
 
 
