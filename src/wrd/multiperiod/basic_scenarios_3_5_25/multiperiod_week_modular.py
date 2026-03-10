@@ -227,6 +227,8 @@ def build_wrd_flowsheet(
         # Valid only between perm flowrates of 490 and 562 m3/hr
         return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
 
+    def calculate_uf_energy_intensity(flow):
+        return 0.20 * pyunits.kWh/pyunits.m**3
 
     m.fs.treatment_energy_rate = Var(
         initialize=0,
@@ -250,6 +252,8 @@ def build_wrd_flowsheet(
             + calculate_energy_intensity(b.fs.water_production_ro_train_4)
             * b.fs.water_production_ro_train_4
             * b.fs.train_4_on
+            + calculate_uf_energy_intensity(b.fs.total_water_production)
+            * b.fs.total_water_production
         )
 
     
