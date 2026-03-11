@@ -225,8 +225,9 @@ def build_wrd_flowsheet(
     # Function to calculate energy consumption per m3 of water treated. 
     def calculate_ro_energy_intensity(flow):
        # Valid only between perm flowrates of 490 and 562 m3/hr
-       return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
-
+    #    return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
+        return (6.34*10**-4*flow/(pyunits.m**3/pyunits.hr) + 0.17)* pyunits.kWh/pyunits.m**3
+    
     def calculate_uf_energy_intensity(flow):
         return 0.20 * pyunits.kWh/pyunits.m**3
 
@@ -355,7 +356,9 @@ def create_wrd_mp(
     n_time_points=24,
     elec_price=elec_price,
     daily_production_target=12 * pyunits.m**3/pyunits.day,
-    total_water_production_target=12 * pyunits.m**3/pyunits.day
+    total_water_production_target=12 * pyunits.m**3/pyunits.day,
+    peak_hours=list(range(16, 21)),  # 4 PM to 9 PM
+    demand_charges={"fixed_demand_price": 5, "on_peak_demand_price": 15},
 ):
     """
     This function creates a multi-period flowsheet object for each month for the WRD plant. This object contains
@@ -505,6 +508,57 @@ def create_wrd_mp(
             - b.fs.mp.blocks[i].process.fs.train_4_on
             <= 1
         )
+    m.fs.fixed_demand_price = Param(
+        initialize=demand_charges["fixed_demand_price"],
+        mutable=True,
+        units=CURRENCY_UNIT / pyunits.kW,
+        doc="Demand charge associated with highest period of energy use",
+    )
+
+    m.fs.on_peak_demand_price = Param(
+        initialize=demand_charges["on_peak_demand_price"],
+        mutable=True,
+        units=CURRENCY_UNIT / pyunits.kW,
+        doc="Demand charge associated with greatest power value within the on-peak hours",
+    )
+
+    m.fs.highest_demand = Var(
+        initialize=1000,
+        bounds=(0, None),
+        units=pyunits.kW,
+        doc="Demand during highest period of energy use",
+    )
+
+    m.fs.highest_on_peak_demand = Var(
+        initialize=1000,
+        bounds=(0, None),
+        units=pyunits.kW,
+        doc="Demand during highest period of energy use within the peak hours",
+    )
+
+    m.fs.fixed_demand_charge = Expression(
+        expr=m.fs.fixed_demand_price * m.fs.highest_demand,
+        doc="Demand charge for highest period of energy use",
+    )
+
+    m.fs.on_peak_demand_charge = Expression(
+        expr=m.fs.on_peak_demand_price * m.fs.highest_on_peak_demand,
+        doc="Demand charge for highest period of energy use within the peak hours",
+    )
+
+    @m.Constraint(range(n_time_points), doc="Upper bound highest demand by each period energy rate")
+    def eq_highest_demand(b, i):
+        return b.fs.highest_demand >= b.fs.mp.blocks[i].process.fs.treatment_energy_rate
+
+    m.fs.peak_hours = [h for h in range(n_time_points) if (h % 24) in peak_hours]
+
+    @m.Constraint(
+        m.fs.peak_hours,
+        doc="Upper bound highest on-peak demand by each period energy rate during peak hours",
+    )
+    def eq_highest_on_peak_demand(b, i):
+        return b.fs.highest_on_peak_demand >= b.fs.mp.blocks[i].process.fs.treatment_energy_rate
+
 
     # @m.Constraint(range(n_time_points), doc="Production should not change at midnight")
     # def eq_midnight_constraint_on_off(b, h):
@@ -518,10 +572,12 @@ def create_wrd_mp(
 
     @m.Expression(doc="Total cost")
     def total_cost(b):
-        return sum(
-            [b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)]
-            )
-    
+        return (
+            sum([b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)])
+            + b.fs.fixed_demand_charge
+            + b.fs.on_peak_demand_charge
+        )
+        
     # Add constraint for every 24 hours of water production
     m.fs.days = range(int(value(n_days)))
     
@@ -677,12 +733,16 @@ if __name__ == "__main__":
     total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
     # season = "winter"
-    season = 'summer'
+    season = 'winter'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
+        peak_hours = list(range(16, 21))
+        demand_charges = {"fixed_demand_price": 19.62, "on_peak_demand_price": 7.99+2.55} # March 2023
     else:
         elec_price = build_elec_price_summer(n=n_time_points)
+        peak_hours = list(range(16, 21)) # But only the weekdays actually!
+        demand_charges = {"fixed_demand_price": 19.94, "on_peak_demand_price": 22.10+14.68} # June 2023
 
     m = create_wrd_mp(
         n_days=n_days,
@@ -690,6 +750,9 @@ if __name__ == "__main__":
         elec_price=elec_price,
         daily_production_target=daily_production_target,
         total_water_production_target=total_water_production_target,
+        peak_hours=peak_hours,
+        demand_charges=demand_charges,
+
     )
     assert_units_consistent(m)
     # print_unfixed_vars(m)
@@ -704,7 +767,7 @@ if __name__ == "__main__":
     solver = SolverFactory("mindtpy")
     results = solver.solve(
         m,
-        strategy="FP",
+        strategy="OA",
         mip_solver="glpk",
         nlp_solver="ipopt",
         tee=True,
@@ -725,7 +788,7 @@ if __name__ == "__main__":
 
     print("Total production in m3:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total energy cost:", m.total_cost(), "2021 $")
+    print("Total electricity cost:", m.total_cost(), "2021 $")
 
     plot_function(m, n_time_points, season)
     plot_grid_cost_over_time(m, n_time_points, season)

@@ -461,17 +461,15 @@ def create_wrd_mp(
         units = pyunits.kW,
         doc = 'Demand during highest period of energy use within the peak hours')
 
-    m.fs.fixed_demand_charge = Var(
-        initialize=0,
-        bounds=(0, None),
-        units=CURRENCY_UNIT,
-        doc = 'Demand Charge for highest 15 min period of energy use within the peak hours')
+    m.fs.fixed_demand_charge = Expression(
+        expr=m.fs.fixed_demand_price * m.fs.highest_demand,
+        doc="Demand charge for highest period of energy use",
+    )
 
-    m.fs.on_peak_demand_charge = Var(
-        initialize=0,
-        bounds=(0, None),
-        units = CURRENCY_UNIT,
-        doc = 'Demand Charge for highest 15 min period of energy use within the peak hours')
+    m.fs.on_peak_demand_charge = Expression(
+        expr=m.fs.on_peak_demand_price * m.fs.highest_on_peak_demand,
+        doc="Demand charge for highest period of energy use within the peak hours",
+    )
 
 
     @m.Constraint(range(n_time_points), doc="Upper bound highest demand by each period energy rate")
@@ -484,14 +482,6 @@ def create_wrd_mp(
     @m.Constraint(m.fs.peak_hours, doc="Upper bound on highest on peak demand by each period energy rate during peak hours")
     def eq_highest_on_peak_demand(b, i):
         return b.fs.highest_on_peak_demand >= b.fs.mp.blocks[i].process.fs.treatment_energy_rate
-
-    @m.Constraint(doc="Demand charge based on highest demand")
-    def eq_demand_charge(b):
-        return m.fs.fixed_demand_charge == b.fs.fixed_demand_price * b.fs.highest_demand
-    
-    @m.Constraint(doc= "Demand charge based on highest on peak demand")
-    def eq_on_peak_demand_charge(b):
-        return m.fs.on_peak_demand_charge == b.fs.on_peak_demand_price * b.fs.highest_on_peak_demand
 
     @m.Expression(doc="Total cost")
     def total_cost(b):
@@ -642,8 +632,12 @@ if __name__ == "__main__":
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
+        peak_hours = list(range(16, 21))
+        demand_charges = {"fixed_demand_price": 19.62, "on_peak_demand_price": 7.99+2.55} # March 2023
     else:
         elec_price = build_elec_price_summer(n=n_time_points)
+        peak_hours = list(range(16, 21)) # But only the weekdays actually!
+        demand_charges = {"fixed_demand_price": 19.94, "on_peak_demand_price": 22.10+14.68} # June 2023
 
     m = create_wrd_mp(
         n_days=n_days,
@@ -651,8 +645,8 @@ if __name__ == "__main__":
         elec_price=elec_price,
         daily_production_target=daily_production_target,
         total_water_production_target=total_water_production_target,
-        peak_hours=list(range(16, 21)),  # 4 PM to 9 PM
-        demand_charges = {"fixed_demand_price": 10, "on_peak_demand_price": 20}
+        peak_hours=peak_hours,
+        demand_charges = demand_charges
     )
     assert_units_consistent(m)
     # print_unfixed_vars(m)
