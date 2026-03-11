@@ -65,15 +65,15 @@ elec_price = elec_price_invoice_1 + elec_price_invoice_2
 
 def build_elec_price_summer(n):
     # Delivery Pricing $/kWh
-    on_peak_del = 0.01971
-    mid_peak_del = 0.01971
-    off_peak_del = 0.01971
+    on_peak_del = 0.01885
+    mid_peak_del = 0.01766
+    off_peak_del = 0.01741
     super_off_peak_del = 0
 
     # Generation Pricing $/kWh
-    on_peak_gen = 0.09934
-    mid_peak_gen = 0.0891
-    off_peak_gen = 0.05782
+    on_peak_gen = 0.13361
+    mid_peak_gen = 0.12228 # MID PEAK ONLY OCCURS ON WEEKENDS
+    off_peak_gen = 0.08419
     super_off_peak_gen = 0
 
     elec_price = np.ones(24)
@@ -81,7 +81,7 @@ def build_elec_price_summer(n):
     # off peak 12 AM - 4 PM
     elec_price[0:16] = off_peak_del + off_peak_gen
     # on peak 4 PM - 9 PM
-    elec_price[16:21] = on_peak_del + mid_peak_gen
+    elec_price[16:21] = on_peak_del + on_peak_gen
     # off peak 9 PM - 12 AM
     elec_price[21:24] = off_peak_del + off_peak_gen
 
@@ -93,17 +93,18 @@ def build_elec_price_summer(n):
 
 
 def build_elec_price_winter(n):
+    # 2023
     # Delivery Pricing
     on_peak_del = 0
-    mid_peak_del = 0.0239
-    off_peak_del = 0.0228
-    super_off_peak_del = 0.022137
+    mid_peak_del = 0.01927
+    off_peak_del = 0.01811
+    super_off_peak_del = 0.01745
 
     # Generation Pricing $/kWh
     on_peak_gen = 0
-    mid_peak_gen = 0.07663
-    off_peak_gen = 0.06397
-    super_off_peak_gen = 0.04026
+    mid_peak_gen = 0.09639
+    off_peak_gen = 0.09695
+    super_off_peak_gen = 0.05329
 
     elec_price = np.ones(24)
 
@@ -118,7 +119,6 @@ def build_elec_price_winter(n):
 
     if value(n) > 24:
         elec_price = np.tile(elec_price, int(value(n) / 24))
-
     return elec_price
 
 
