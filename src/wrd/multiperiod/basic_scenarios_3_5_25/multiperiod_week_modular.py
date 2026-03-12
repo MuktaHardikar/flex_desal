@@ -370,8 +370,8 @@ def initialize_mp(m):
     max_train_flow = 53150 / 24 / 4  # m3/hr
     m.fs.water_production_ro_train_1.fix(max_train_flow)
     m.fs.water_production_ro_train_2.fix(max_train_flow)
-    m.fs.water_production_ro_train_3.fix(max_train_flow * 1)
-    m.fs.water_production_ro_train_4.fix(max_train_flow * 1)
+    m.fs.water_production_ro_train_3.fix(max_train_flow)
+    m.fs.water_production_ro_train_4.fix(max_train_flow)
 
     m.fs.train_1_on.fix(1)
     m.fs.train_2_on.fix(1)
@@ -826,7 +826,7 @@ if __name__ == "__main__":
 
     print("Total production in m3:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total electricity cost for week:", m.total_cost(), "2021 $")
+    print("Total electricity cost for month:", m.total_cost(), "2021 $")
     
     print("-"*10,"Monthly Costs","-"*10)
     print("Fixed demand charge:", m.fs.fixed_demand_charge(), "2021 $")

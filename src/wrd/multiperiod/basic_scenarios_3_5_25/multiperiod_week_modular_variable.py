@@ -65,7 +65,7 @@ elec_price = elec_price_invoice_1 + elec_price_invoice_2
 
 def build_elec_price_summer(n):
     # Delivery Pricing $/kWh
-    on_peak_del = 0.01885 #* 1000
+    on_peak_del = 0.01885 
     mid_peak_del = 0.01766
     off_peak_del = 0.01741
     super_off_peak_del = 0
@@ -818,7 +818,7 @@ if __name__ == "__main__":
 
     print("Total production in m3:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total electricity cost for week:", m.total_cost(), "2021 $")
+    print("Total electricity cost for month:", m.total_cost(), "2021 $")
     
     print("-"*10,"Monthly Costs","-"*10)
     print("Fixed demand charge:", m.fs.fixed_demand_charge(), "2021 $")

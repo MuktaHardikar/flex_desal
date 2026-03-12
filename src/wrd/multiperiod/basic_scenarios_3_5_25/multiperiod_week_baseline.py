@@ -149,8 +149,8 @@ def build_wrd_flowsheet(
         doc="Electricity price for the current time block",
     )
 
-    total_plant_production_capacity = 53150 / 24  # m3 per hour
-    train_production_capacity = total_plant_production_capacity / 4  # m3 per hour per train
+    total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h  # m3 per hour
+    train_production_capacity = total_plant_production_capacity / 4   # m3 per hour per train
 
     m.fs.total_water_production = Var(
         initialize = total_plant_production_capacity,
@@ -161,28 +161,28 @@ def build_wrd_flowsheet(
     
     m.fs.water_production_ro_train_1 = Var(
         initialize = train_production_capacity,
-        bounds=(train_production_capacity*1, train_production_capacity),
+        bounds=(0, train_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Volume of water treated by RO train 1",
     )
 
     m.fs.water_production_ro_train_2 = Var(
         initialize = train_production_capacity,
-        bounds=(train_production_capacity*1, train_production_capacity),
+        bounds=(0, train_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Volume of water treated by RO train 2",
     )
 
     m.fs.water_production_ro_train_3 = Var(
         initialize=train_production_capacity,
-        bounds=(train_production_capacity*1, train_production_capacity),
+        bounds=(0, train_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Volume of water treated by RO train 3",
     )
 
     m.fs.water_production_ro_train_4 = Var(
         initialize=train_production_capacity,
-        bounds=(train_production_capacity*1, train_production_capacity),
+        bounds=(0, train_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Volume of water treated by RO train 4",
     )
@@ -212,24 +212,35 @@ def build_wrd_flowsheet(
         doc="Binary variable indicating if RO train 4 is on",
     )
 
-    # Constraint to connect total water production to sum of RO train production
+    # Constraint connecting binary variable to the flowrate
+    @m.Constraint(doc="Upper bound for flow depends on the binary variable")
+    def eq_train_1_ub(b):
+        return b.fs.water_production_ro_train_1 == train_production_capacity * b.fs.train_1_on
+
+    @m.Constraint(doc="Upper bound for flow depends on the binary variable")
+    def eq_train_2_ub(b):
+        return b.fs.water_production_ro_train_2 == train_production_capacity * b.fs.train_2_on
+
+    
+    @m.Constraint(doc="Upper bound for flow depends on the binary variable")
+    def eq_train_3_ub(b):
+        return b.fs.water_production_ro_train_3 == train_production_capacity * b.fs.train_3_on
+
+    
+    @m.Constraint(doc="Upper bound for flow depends on the binary variable")
+    def eq_train_4_ub(b):
+        return b.fs.water_production_ro_train_4 == train_production_capacity * b.fs.train_4_on
+
+     # Constraint to connect total water production to sum of RO train production
     @m.Constraint(doc="Total water production is sum of RO train production")
     def eq_total_water_production(b):
         return (
             b.fs.total_water_production
-            == b.fs.water_production_ro_train_1 * b.fs.train_1_on
-            + b.fs.water_production_ro_train_2 * b.fs.train_2_on
-            + b.fs.water_production_ro_train_3 * b.fs.train_3_on
-            + b.fs.water_production_ro_train_4 * b.fs.train_4_on
+            == b.fs.water_production_ro_train_1
+            + b.fs.water_production_ro_train_2 
+            + b.fs.water_production_ro_train_3 
+            + b.fs.water_production_ro_train_4 
         )
-    
-    def calculate_uf_energy_intensity(flow):
-        return 0.20 * pyunits.kWh/pyunits.m**3
-
-    # Function to calculate energy consumption per m3 of water treated. 
-    def calculate_energy_intensity(flow):
-       # Valid only between perm flowrates of 490 and 562 m3/hr
-       return (7.060E-06*(flow/(pyunits.m**3/pyunits.hr))**2 - 6.779E-03*(flow/(pyunits.m**3/pyunits.hr)) + 2.103)* pyunits.kWh/pyunits.m**3
 
     m.fs.treatment_energy_rate = Var(
         initialize=0,
@@ -238,26 +249,28 @@ def build_wrd_flowsheet(
         doc="Total treatment energy required per hour",
     )
 
+    def calculate_ro_power(flow):
+        # Linear Fit -  Problem is MILP
+        return (0.837 * flow/(pyunits.m**3/pyunits.hr) -179.4) * pyunits.kW
+        # Quadratic Fit - Problem becomes MINLP
+        # return (0.0043*(flow/(pyunits.m**3/pyunits.hr))**2 - 3.72*flow/(pyunits.m**3/pyunits.hr) + 1015.8) * pyunits.kW
+
+    
+    def calculate_uf_power(flow):
+        # return 1 * pyunits.kW
+        return (0.199 * flow/(pyunits.m**3/pyunits.hr) - 30.0) * pyunits.kW # Very rough estimate here
+
+
     @m.Constraint(doc="Calculate total treatment energy rate")
     def eq_treatment_energy_rate(b):
         return b.fs.treatment_energy_rate == (
-            calculate_energy_intensity(b.fs.water_production_ro_train_1)
-            * b.fs.water_production_ro_train_1
-            * b.fs.train_1_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_2)
-            * b.fs.water_production_ro_train_2
-            * b.fs.train_2_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_3)
-            * b.fs.water_production_ro_train_3
-            * b.fs.train_3_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_4)
-            * b.fs.water_production_ro_train_4
-            * b.fs.train_4_on
-            + calculate_uf_energy_intensity(b.fs.total_water_production)
-            * b.fs.total_water_production
+            calculate_ro_power(b.fs.water_production_ro_train_1)
+            + calculate_ro_power(b.fs.water_production_ro_train_2)
+            + calculate_ro_power(b.fs.water_production_ro_train_3)
+            + calculate_ro_power(b.fs.water_production_ro_train_4)
+            + calculate_uf_power(b.fs.total_water_production)
         )
 
-    
     m.fs.acc_production = Var(
         initialize=0,
         bounds=(0, None),
@@ -626,7 +639,7 @@ if __name__ == "__main__":
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day # 74 to give a bit of wiggle room
+    total_water_production_target = 0.74 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day # 74 to give a bit of wiggle room
 
     season = 'summer'
 
@@ -658,14 +671,18 @@ if __name__ == "__main__":
 
     # dt = DiagnosticsToolbox(m) 
 
-    solver = SolverFactory("mindtpy")
-    results = solver.solve(
-        m,
-        strategy="OA",
-        mip_solver="glpk",
-        nlp_solver="ipopt",
-        tee=True,
-    )
+    # solver = SolverFactory("mindtpy")
+    # results = solver.solve(
+    #     m,
+    #     strategy="OA",
+    #     mip_solver="glpk",
+    #     nlp_solver="ipopt",
+    #     tee=True,
+    # )
+    solver = SolverFactory("glpk")
+    results = solver.solve(m, tee=True)
+
+
     prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
     energy = [
         value(
@@ -680,9 +697,9 @@ if __name__ == "__main__":
     
     print(degrees_of_freedom(m))
 
-    print("Total production in m3:", m.total_production())
+    print(f"Total production in m3 for {n_days} days:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total electricity cost for week:", m.total_cost(), "2021 $")
+    print("Total electricity cost for month:", m.total_cost(), "2021 $")
     
     print("-"*10,"Monthly Costs","-"*10)
     print("Fixed demand charge:", m.fs.fixed_demand_charge(), "2021 $")
