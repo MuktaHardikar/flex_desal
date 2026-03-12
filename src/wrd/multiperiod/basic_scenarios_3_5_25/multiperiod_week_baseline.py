@@ -10,7 +10,7 @@ from pyomo.util.check_units import assert_units_consistent
 import matplotlib.dates as mdates
 
 from idaes.core import FlowsheetBlock
-from pyomo.environ import Var, Binary, Constraint, Objective, value
+from pyomo.environ import Var, Binary, Constraint, Objective, Expression, value
 from watertap.core.util.model_diagnostics import *
 from idaes.core.util.model_statistics import *
 
@@ -249,26 +249,25 @@ def build_wrd_flowsheet(
         doc="Total treatment energy required per hour",
     )
 
-    def calculate_ro_power(flow):
-        # Linear Fit -  Problem is MILP
-        return (0.837 * flow/(pyunits.m**3/pyunits.hr) -179.4) * pyunits.kW
-        # Quadratic Fit - Problem becomes MINLP
-        # return (0.0043*(flow/(pyunits.m**3/pyunits.hr))**2 - 3.72*flow/(pyunits.m**3/pyunits.hr) + 1015.8) * pyunits.kW
+    def calculate_ro_power(flow, train_on):
+        # Linear train power model (kW): 0 when train is off, fitted line when on
+        return (
+            0.837 * flow / (pyunits.m**3 / pyunits.hr) - 179.4 * train_on
+        ) * pyunits.kW
 
-    
-    def calculate_uf_power(flow):
-        # return 1 * pyunits.kW
-        return (0.199 * flow/(pyunits.m**3/pyunits.hr) - 30.0) * pyunits.kW # Very rough estimate here
-
+    def calculate_uf_power(flow,uf_on):
+        # Linear UF power model (kW)
+        # If train_1_on == 0, then the whole system is off and no power use from UF
+        return (0.199 * flow / (pyunits.m**3 / pyunits.hr) - 30.0 * uf_on) * pyunits.kW
 
     @m.Constraint(doc="Calculate total treatment energy rate")
     def eq_treatment_energy_rate(b):
         return b.fs.treatment_energy_rate == (
-            calculate_ro_power(b.fs.water_production_ro_train_1)
-            + calculate_ro_power(b.fs.water_production_ro_train_2)
-            + calculate_ro_power(b.fs.water_production_ro_train_3)
-            + calculate_ro_power(b.fs.water_production_ro_train_4)
-            + calculate_uf_power(b.fs.total_water_production)
+            calculate_ro_power(b.fs.water_production_ro_train_1, b.fs.train_1_on)
+            + calculate_ro_power(b.fs.water_production_ro_train_2, b.fs.train_2_on)
+            + calculate_ro_power(b.fs.water_production_ro_train_3, b.fs.train_3_on)
+            + calculate_ro_power(b.fs.water_production_ro_train_4, b.fs.train_4_on)
+            + calculate_uf_power(b.fs.total_water_production,b.fs.train_1_on)
         )
 
     m.fs.acc_production = Var(
@@ -697,16 +696,18 @@ if __name__ == "__main__":
     
     print(degrees_of_freedom(m))
 
-    print(f"Total production in m3 for {n_days} days:", m.total_production())
+    print("-"*10,"Ouputs over Period","-"*10)
+    print("Total production in m3:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total electricity cost for month:", m.total_cost(), "2021 $")
+    print("Total energy consumption in kWh:", m.fs.mp.blocks[n_time_points - 1].process.fs.acc_energy())
     
     print("-"*10,"Monthly Costs","-"*10)
     print("Fixed demand charge:", m.fs.fixed_demand_charge(), "2021 $")
     print("On-peak demand charge:", m.fs.on_peak_demand_charge(), "2021 $")
     print("Consumption charge:", (28/n_days)*sum(m.fs.mp.blocks[i].process.fs.grid_cost() for i in range(n_time_points)), "2021 $")
+    print("Total electricity cost for month:", m.total_cost(), "2021 $")
 
     plot_function(m, n_time_points, season)
-    plot_grid_cost_over_time(m, n_time_points, season)
+    # plot_grid_cost_over_time(m, n_time_points, season)
 
     
