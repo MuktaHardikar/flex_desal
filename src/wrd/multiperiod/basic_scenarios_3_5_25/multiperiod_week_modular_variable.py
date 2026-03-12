@@ -603,7 +603,7 @@ def create_wrd_mp(
     @m.Expression(doc="Total cost")
     def total_cost(b):
         return (
-            sum([b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)])
+            (30/n_days)*sum([b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)])
             + b.fs.fixed_demand_charge
             + b.fs.on_peak_demand_charge
         )
@@ -759,9 +759,9 @@ if __name__ == "__main__":
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
+    total_water_production_target = 0.8 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
-    season = 'summer'
+    season = 'winter'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)

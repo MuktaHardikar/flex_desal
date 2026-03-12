@@ -486,7 +486,7 @@ def create_wrd_mp(
 
     @m.Expression(doc="Total cost")
     def total_cost(b):
-        return sum([b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)]) + b.fs.fixed_demand_charge + b.fs.on_peak_demand_charge
+        return (30/n_days)*sum([b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)]) + b.fs.fixed_demand_charge + b.fs.on_peak_demand_charge
     
     @m.Constraint(doc="Total production")
     def total_production(b):
