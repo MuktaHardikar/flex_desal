@@ -93,6 +93,7 @@ def build_elec_price_summer(n):
 
 
 def build_elec_price_winter(n):
+    # 2023
     # Delivery Pricing
     on_peak_del = 0
     mid_peak_del = 0.01927
@@ -625,9 +626,8 @@ if __name__ == "__main__":
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 0.74 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day # 74 to give a bit of wiggle room
+    total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day # 74 to give a bit of wiggle room
 
-    # season = "winter"
     season = 'summer'
 
     if season == "winter":
@@ -682,7 +682,12 @@ if __name__ == "__main__":
 
     print("Total production in m3:", m.total_production())
     print("Total target water production in m3:", total_water_production_target())
-    print("Total electricity cost:", m.total_cost(), "2021 $")
+    print("Total electricity cost for week:", m.total_cost(), "2021 $")
+    
+    print("-"*10,"Monthly Costs","-"*10)
+    print("Fixed demand charge:", m.fs.fixed_demand_charge(), "2021 $")
+    print("On-peak demand charge:", m.fs.on_peak_demand_charge(), "2021 $")
+    print("Consumption charge:", (28/n_days)*sum(m.fs.mp.blocks[i].process.fs.grid_cost() for i in range(n_time_points)), "2021 $")
 
     plot_function(m, n_time_points, season)
     plot_grid_cost_over_time(m, n_time_points, season)
