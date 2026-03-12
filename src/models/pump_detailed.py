@@ -214,9 +214,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 units=pyunits.dimensionless,
             )
 
-            # Allow for negative inlet pump pressures
-            self.control_volume.properties_in[0].pressure.setlb(None)
-            self.control_volume.properties_in[0].pressure.domain = Reals
 
             ### System curve variables ###
             # design_head = system_curve_geometric_head +  system_curve_flow_constant * (design_flow)**2
