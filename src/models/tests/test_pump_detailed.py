@@ -369,7 +369,7 @@ def test_negative_inlet_pressure():
     # Change the bounds for the inlet pressure
     m.fs.unit.control_volume.properties_in[0].pressure.setlb(None)
     m.fs.unit.control_volume.properties_in[0].pressure.domain = Reals
-    
+
     # Calculated feed conditions
     feed_flow_mass = feed_flow_vol * density
     feed_mass_frac_H2O = 1 - feed_mass_frac_TDS

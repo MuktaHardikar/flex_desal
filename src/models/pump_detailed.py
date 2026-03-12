@@ -214,7 +214,6 @@ class PumpIsothermalData(InitializationMixin, PumpData):
                 units=pyunits.dimensionless,
             )
 
-
             ### System curve variables ###
             # design_head = system_curve_geometric_head +  system_curve_flow_constant * (design_flow)**2
 
