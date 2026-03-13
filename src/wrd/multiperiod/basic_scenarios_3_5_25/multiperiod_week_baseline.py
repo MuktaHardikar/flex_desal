@@ -151,6 +151,13 @@ def build_wrd_flowsheet(
 
     total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h  # m3 per hour
     train_production_capacity = total_plant_production_capacity / 4   # m3 per hour per train
+    max_ro_train_power = (
+        0.837 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 179.4
+    ) * pyunits.kW
+    max_uf_power = (
+        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 30.0
+    ) * pyunits.kW
+    max_treatment_power = 4 * max_ro_train_power + max_uf_power
 
     m.fs.total_water_production = Var(
         initialize = total_plant_production_capacity,
@@ -244,7 +251,7 @@ def build_wrd_flowsheet(
 
     m.fs.treatment_energy_rate = Var(
         initialize=0,
-        bounds=(0, None),
+        bounds=(0, max_treatment_power),
         units=pyunits.kWh / pyunits.h,
         doc="Total treatment energy required per hour",
     )
@@ -388,6 +395,16 @@ def create_wrd_mp(
 
     m.fs = FlowsheetBlock(dynamic=False)
 
+    total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h
+    train_production_capacity = total_plant_production_capacity / 4
+    max_ro_train_power = (
+        0.837 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 179.4
+    ) * pyunits.kW
+    max_uf_power = (
+        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 30.0
+    ) * pyunits.kW
+    max_treatment_power = 4 * max_ro_train_power + max_uf_power
+
     m.fs.mp = MultiPeriodModel(
         n_time_points=n_time_points,
         process_model_func=build_wrd_flowsheet,
@@ -464,13 +481,13 @@ def create_wrd_mp(
 
     m.fs.highest_demand = Var(
         initialize=0,
-        bounds=(0, None),
+        bounds=(0, max_treatment_power),
         units=pyunits.kW,
         doc = 'Demand during highest period of energy use')
 
     m.fs.highest_on_peak_demand = Var(
         initialize=0,
-        bounds=(0, None),
+        bounds=(0, max_treatment_power),
         units = pyunits.kW,
         doc = 'Demand during highest period of energy use within the peak hours')
 
@@ -678,7 +695,11 @@ if __name__ == "__main__":
     #     nlp_solver="ipopt",
     #     tee=True,
     # )
+
     solver = SolverFactory("glpk")
+    # Practical stopping criteria for long-horizon MILPs
+    solver.options["mipgap"] = 0.005
+    solver.options["tmlim"] = 180
     results = solver.solve(m, tee=True)
 
 
