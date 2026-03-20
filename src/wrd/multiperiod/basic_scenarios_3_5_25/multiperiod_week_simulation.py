@@ -10,7 +10,7 @@ from pyomo.util.check_units import assert_units_consistent
 import matplotlib.dates as mdates
 
 from idaes.core import FlowsheetBlock
-from pyomo.environ import Var, Binary, Constraint, Objective, value
+from pyomo.environ import Var, Binary, Constraint, Objective, Expression, value
 from watertap.core.util.model_diagnostics import *
 from idaes.core.util.model_statistics import *
 
@@ -19,6 +19,11 @@ from idaes.apps.grid_integration.multiperiod.multiperiod import MultiPeriodModel
 from idaes.core.solvers.get_solver import get_solver
 import idaes.logger as idaeslog
 from pyomo.environ import SolverFactory
+from pyomo.opt import SolverStatus, TerminationCondition
+
+"""
+Should allow an input of a csv file of the flowrates and binary variables for each train. 
+"""
 
 if hasattr(pyunits, "USD_2021"):
     CURRENCY_UNIT = pyunits.USD_2021
@@ -28,7 +33,7 @@ else:
     pyunits.load_definitions_from_strings(["USD = [currency]"])
     CURRENCY_UNIT = pyunits.USD
 
-# Based on rates in 2021 from GRIP Cost Tracker
+
 # Based on rates in 2021 from GRIP Cost Tracker
 elec_price_invoice_1 = [
     0.15,
@@ -45,6 +50,7 @@ elec_price_invoice_1 = [
     0.24,
 ]
 
+
 elec_price_invoice_2 = [
     0.14,
     0.14,
@@ -60,12 +66,93 @@ elec_price_invoice_2 = [
     0.26,
 ]
 
+
 elec_price = elec_price_invoice_1 + elec_price_invoice_2
+
+TOTAL_PLANT_PRODUCTION_CAPACITY = 53150 / 24  # m3/hr
+MAX_TRAIN_FLOW = TOTAL_PLANT_PRODUCTION_CAPACITY / 4  # m3/hr
+TRAIN_IDS = (1, 2, 3, 4)
+
+
+def load_train_schedule(csv_path, n_time_points=None):
+    """
+    Load schedule CSV for simulation.
+
+    Required columns:
+      - train_1_on ... train_4_on
+      - train_1_flow_pct ... train_4_flow_pct
+
+    Optional column:
+      - time_index (sorted if present)
+    """
+    schedule = pd.read_csv(csv_path)
+
+    if "time_index" in schedule.columns:
+        schedule = schedule.sort_values("time_index").reset_index(drop=True)
+
+    required_cols = [
+        *[f"train_{train_id}_on" for train_id in TRAIN_IDS],
+        *[f"train_{train_id}_flow_pct" for train_id in TRAIN_IDS],
+    ]
+    missing_cols = [col for col in required_cols if col not in schedule.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Schedule CSV is missing required columns: {missing_cols}. "
+            f"Expected columns include {required_cols}."
+        )
+
+    if n_time_points is not None and len(schedule) != n_time_points:
+        raise ValueError(
+            f"Schedule has {len(schedule)} rows but n_time_points={n_time_points}. "
+            "Provide one row per time point."
+        )
+
+    for train_id in TRAIN_IDS:
+        on_col = f"train_{train_id}_on"
+        pct_col = f"train_{train_id}_flow_pct"
+
+        on_values = schedule[on_col]
+        invalid_on = ~on_values.isin([0, 1])
+        if invalid_on.any():
+            bad_idx = invalid_on[invalid_on].index.tolist()[:5]
+            raise ValueError(
+                f"{on_col} must contain only 0/1 values. Invalid rows (first 5): {bad_idx}."
+            )
+
+        pct_values = pd.to_numeric(schedule[pct_col], errors="coerce")
+        if pct_values.isna().any():
+            bad_idx = pct_values[pct_values.isna()].index.tolist()[:5]
+            raise ValueError(
+                f"{pct_col} must be numeric. Invalid rows (first 5): {bad_idx}."
+            )
+        if ((pct_values < 0) | (pct_values > 100)).any():
+            bad_idx = pct_values[((pct_values < 0) | (pct_values > 100))].index.tolist()[:5]
+            raise ValueError(
+                f"{pct_col} must be within [0, 100]. Invalid rows (first 5): {bad_idx}."
+            )
+
+        bad_off_rows = schedule[(schedule[on_col] == 0) & (pct_values > 0)].index.tolist()
+        if bad_off_rows:
+            raise ValueError(
+                f"{pct_col} must be 0 when {on_col}=0. Invalid rows (first 5): {bad_off_rows[:5]}."
+            )
+
+        bad_on_rows = schedule[(schedule[on_col] == 1) & (pct_values < 85)].index.tolist()
+        if bad_on_rows:
+            raise ValueError(
+                f"For this model, on-state trains must run at >=85% flow. "
+                f"Invalid rows (first 5): {bad_on_rows[:5]}."
+            )
+
+        schedule[on_col] = schedule[on_col].astype(int)
+        schedule[pct_col] = pct_values.astype(float)
+
+    return schedule
 
 
 def build_elec_price_summer(n):
     # Delivery Pricing $/kWh
-    on_peak_del = 0.01885
+    on_peak_del = 0.01885 
     mid_peak_del = 0.01766
     off_peak_del = 0.01741
     super_off_peak_del = 0
@@ -126,10 +213,8 @@ def build_wrd_flowsheet(
         m=None, 
         elec_price=0.1,
 ):
-    
     if m is None:
-        m = ConcreteModel()  
-
+        m = ConcreteModel()
     
     m.fs = FlowsheetBlock(dynamic=False)
 
@@ -147,7 +232,7 @@ def build_wrd_flowsheet(
         doc="Electricity price for the current time block",
     )
 
-    total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h  # m3 per hour
+    total_plant_production_capacity = TOTAL_PLANT_PRODUCTION_CAPACITY * pyunits.m**3 / pyunits.h  # m3 per hour
     train_production_capacity = total_plant_production_capacity / 4   # m3 per hour per train
     max_ro_train_power = (
         0.837 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 179.4
@@ -159,7 +244,7 @@ def build_wrd_flowsheet(
 
     m.fs.total_water_production = Var(
         initialize = total_plant_production_capacity,
-        bounds = (total_plant_production_capacity / 2, total_plant_production_capacity),
+        bounds = (0, total_plant_production_capacity),
         units = pyunits.m**3/pyunits.h,
         doc="Water produced in a hour in m3",
     )
@@ -174,7 +259,7 @@ def build_wrd_flowsheet(
     m.fs.water_production_ro_train_2 = Var(
         initialize = train_production_capacity,
         bounds=(0, train_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        units = pyunits.m**3/pyunits.h, 
         doc="Volume of water treated by RO train 2",
     )
 
@@ -217,14 +302,14 @@ def build_wrd_flowsheet(
         doc="Binary variable indicating if RO train 4 is on",
     )
 
- # Constraint connecting binary variable to the flowrate
+    # Constraint defining the flowrates based on input file
     @m.Constraint(doc="Upper bound for flow depends on the binary variable")
     def eq_train_1_ub(b):
         return b.fs.water_production_ro_train_1 <= train_production_capacity * b.fs.train_1_on
 
     @m.Constraint(doc="Lower bound for flow depends on the binary variable")
     def eq_train_1_lb(b):
-        return b.fs.water_production_ro_train_1 >= train_production_capacity * b.fs.train_1_on
+        return b.fs.water_production_ro_train_1 >= train_production_capacity * 0.85 * b.fs.train_1_on
 
     @m.Constraint(doc="Upper bound for flow depends on the binary variable")
     def eq_train_2_ub(b):
@@ -232,23 +317,25 @@ def build_wrd_flowsheet(
 
     @m.Constraint(doc="Lower bound for flow depends on the binary variable")
     def eq_train_2_lb(b):
-        return b.fs.water_production_ro_train_2 >= train_production_capacity * b.fs.train_2_on
-    
+        return b.fs.water_production_ro_train_2 >= train_production_capacity * 0.85 * b.fs.train_2_on
+
     @m.Constraint(doc="Upper bound for flow depends on the binary variable")
     def eq_train_3_ub(b):
         return b.fs.water_production_ro_train_3 <= train_production_capacity * b.fs.train_3_on
 
+
     @m.Constraint(doc="Lower bound for flow depends on the binary variable")
     def eq_train_3_lb(b):
-        return b.fs.water_production_ro_train_3 >= train_production_capacity * b.fs.train_3_on
+        return b.fs.water_production_ro_train_3 >= train_production_capacity * 0.85 * b.fs.train_3_on
     
     @m.Constraint(doc="Upper bound for flow depends on the binary variable")
     def eq_train_4_ub(b):
         return b.fs.water_production_ro_train_4 <= train_production_capacity * b.fs.train_4_on
 
+
     @m.Constraint(doc="Lower bound for flow depends on the binary variable")
     def eq_train_4_lb(b):
-        return b.fs.water_production_ro_train_4 >= train_production_capacity * b.fs.train_4_on
+        return b.fs.water_production_ro_train_4 >= train_production_capacity * 0.85 * b.fs.train_4_on
 
 
     # Constraint to connect total water production to sum of RO train production
@@ -261,7 +348,7 @@ def build_wrd_flowsheet(
             + b.fs.water_production_ro_train_3 
             + b.fs.water_production_ro_train_4 
         )
-
+    
     m.fs.treatment_energy_rate = Var(
         initialize=0,
         bounds=(0, max_treatment_power),
@@ -275,8 +362,6 @@ def build_wrd_flowsheet(
         return (
             0.837 * flow / (pyunits.m**3 / pyunits.hr) - 179.4 * train_on
         ) * pyunits.kW
-    # Quadratic Fit - Problem becomes MINLP
-        # return (0.0043*(flow/(pyunits.m**3/pyunits/hr))**2 - 3.72*flow/(pyunits.m**3/pyunits.hr) + 1015.8) * pyunits.kW
 
     def calculate_uf_power(flow,uf_on):
         # Linear UF power model (kW)
@@ -292,6 +377,7 @@ def build_wrd_flowsheet(
             + calculate_ro_power(b.fs.water_production_ro_train_4, b.fs.train_4_on)
             + calculate_uf_power(b.fs.total_water_production,b.fs.train_1_on)
         )
+
     
     m.fs.acc_production = Var(
         initialize=0,
@@ -351,7 +437,6 @@ def build_wrd_flowsheet(
             * b.fs.treatment_energy_rate
             * b.fs.time_step
         )
-
     return m
 
 
@@ -363,23 +448,23 @@ def get_wrd_variable_pairs(t1, t2):
     ]
 
 
-def unfix_dof(m):
-    # Train 1 and 2 are always on, so we only vary the fraction of water treated by train 3 and 4
-    m.fs.water_production_ro_train_3.unfix()
-    m.fs.water_production_ro_train_4.unfix()
-    m.fs.train_3_on.unfix()
-    m.fs.train_4_on.unfix()
-    return None
+# def unfix_dof(m):
+#     # Train 1 and 2 are always on, so we only vary the fraction of water treated by train 3 and 4
+#     m.fs.water_production_ro_train_3.unfix()
+#     m.fs.water_production_ro_train_4.unfix()
+#     m.fs.train_3_on.unfix()
+#     m.fs.train_4_on.unfix()
+#     return None
 
 
 def initialize_mp(m):
     print("Initializing multi-period model...")
     # Check if first time step
-    max_train_flow = 53150 / 24 / 4  # m3/hr
+    max_train_flow = MAX_TRAIN_FLOW
     m.fs.water_production_ro_train_1.fix(max_train_flow)
     m.fs.water_production_ro_train_2.fix(max_train_flow)
-    m.fs.water_production_ro_train_3.fix(max_train_flow)
-    m.fs.water_production_ro_train_4.fix(max_train_flow)
+    m.fs.water_production_ro_train_3.fix(max_train_flow * .85)
+    m.fs.water_production_ro_train_4.fix(max_train_flow * .85)
 
     m.fs.train_1_on.fix(1)
     m.fs.train_2_on.fix(1)
@@ -387,12 +472,24 @@ def initialize_mp(m):
     m.fs.train_4_on.fix(1)
 
 
+def apply_train_schedule(process_model, schedule_row):
+    for train_id in TRAIN_IDS:
+        on_col = f"train_{train_id}_on"
+        pct_col = f"train_{train_id}_flow_pct"
+
+        train_on = int(schedule_row[on_col])
+        flow_pct = float(schedule_row[pct_col])
+        flow_value = MAX_TRAIN_FLOW * flow_pct / 100.0
+
+        getattr(process_model.fs, f"train_{train_id}_on").fix(train_on)
+        getattr(process_model.fs, f"water_production_ro_train_{train_id}").fix(flow_value)
+
+
 def create_wrd_mp(
     n_days = 1,
     n_time_points=24,
     elec_price=elec_price,
-    daily_production_target=12 * pyunits.m**3/pyunits.day,
-    total_water_production_target=12 * pyunits.m**3/pyunits.day,
+    train_schedule=None,
     peak_hours=list(range(16, 21)),  # 4 PM to 9 PM
     demand_charges={"fixed_demand_price": 5, "on_peak_demand_price": 15},
 ):
@@ -415,7 +512,7 @@ def create_wrd_mp(
         process_model_func=build_wrd_flowsheet,
         linking_variable_func=get_wrd_variable_pairs,
         initialization_func=None,
-        unfix_dof_func=unfix_dof,
+        unfix_dof_func=None,
         outlvl=logging.WARNING,
     )
 
@@ -430,8 +527,6 @@ def create_wrd_mp(
         for t in range(n_time_points)
     }
 
-    unfix_dof_options = {t: {} for t in range(n_time_points)}
-
     m.fs.mp.build_multi_period_model(
         model_data_kwargs=flowsheet_options,
         flowsheet_options=flowsheet_options,
@@ -439,123 +534,20 @@ def create_wrd_mp(
         unfix_dof_options=None,
     )
 
+    if train_schedule is None:
+        raise ValueError("train_schedule must be provided for simulation mode.")
+
+    if len(train_schedule) != n_time_points:
+        raise ValueError(
+            f"train_schedule has {len(train_schedule)} rows but n_time_points={n_time_points}."
+        )
+
     for t in range(n_time_points):
         initialize_mp(m.fs.mp.blocks[t].process)
-        unfix_dof(m.fs.mp.blocks[t].process)
+        apply_train_schedule(m.fs.mp.blocks[t].process, train_schedule.iloc[t])
        
     m.fs.mp.blocks[0].process.fs.pre_acc_production.fix(0)
     m.fs.mp.blocks[0].process.fs.pre_acc_energy.fix(0)
-
-    # Constraints to connect non-working hours water production to be constant
-    # Non working hours
-    non_working_hours_morning = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-    non_working_hours_evening = [17, 18, 19, 20, 21, 22, 23]
-    
-    m.fs.non_working_hours_morning = [h for h in range(n_time_points) if (h % 24) in non_working_hours_morning]
-    m.fs.non_working_hours_evening = [h for h in range(n_time_points) if (h % 24) in non_working_hours_evening]
-
-    # Constraints to keep production constant during non-working hours (skip at transitions)
-    @m.Constraint(m.fs.non_working_hours_morning, doc="Production constant during non-working hours")
-    def eq_non_working_hrs_morning(b, h):
-        if h == 0: # or (h % 24)==0:
-            return Constraint.Skip
-        return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
-    
-    @m.Constraint(m.fs.non_working_hours_evening, doc="Production constant during non-working hours")
-    def eq_non_working_hrs_evening(b, h):
-        # if h == 16 or (h % 24)==16:
-        #     return Constraint.Skip
-        return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
-    
-    # # Constraints to keep trains on/off state constant during non-working hours
-    # @m.Constraint(non_working_hours, doc="Train 1 on/off state constant during non-working hours")
-    # def eq_train_1_on_nwh(b, h):
-    #     if h == 0 or (h % 24) in [9, 16]:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_1_on == b.fs.mp.blocks[h - 1].process.fs.train_1_on
-
-    # @m.Constraint(non_working_hours, doc="Train 2 on/off state constant during non-working hours")
-    # def eq_train_2_on_nwh(b, h):
-    #     if h == 0 or (h % 24) in [9, 16]:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_2_on == b.fs.mp.blocks[h - 1].process.fs.train_2_on
-
-    @m.Constraint(m.fs.non_working_hours_morning, doc="Train 3 on/off state constant during non-working hours")
-    def eq_train_3_on_nwh_morning(b, h):
-        if h == 0: # This should ensure the midnight constraint
-            return Constraint.Skip
-        return b.fs.mp.blocks[h].process.fs.train_3_on == b.fs.mp.blocks[h - 1].process.fs.train_3_on
-    
-    @m.Constraint(m.fs.non_working_hours_evening, doc="Train 3 on/off state constant during non-working hours")
-    def eq_train_3_on_nwh_evening(b, h):
-        if h == 0: 
-            return Constraint.Skip
-        return b.fs.mp.blocks[h].process.fs.train_3_on == b.fs.mp.blocks[h - 1].process.fs.train_3_on
-    
-    # Not sure if the below is really needed due to the eq_train_3_over_train_4 constraint.
-    # @m.Constraint(m.fs.non_working_hours_morning, doc="Train 4 on/off state constant during non-working hours")
-    # def eq_train_4_on_nwh_morning(b, h):
-    #     if h == 0: #or (h % 24)==0: --> this causes issues but idk why
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
-
-    # @m.Constraint(m.fs.non_working_hours_evening, doc="Train 4 on/off state constant during non-working hours")
-    # def eq_train_4_on_nwh_evening(b, h):
-    #     if h == 0:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[h].process.fs.train_4_on == b.fs.mp.blocks[h - 1].process.fs.train_4_on
-
-    # Ensure train 4 turns off first before train 3
-    @m.Constraint(range(n_time_points), doc="Train 3 will always have the higher production than train 4")
-    def eq_train_3_over_train_4(b, i):
-        return b.fs.mp.blocks[i].process.fs.water_production_ro_train_3 >= b.fs.mp.blocks[i].process.fs.water_production_ro_train_4
-
-    @m.Constraint(range(n_time_points), doc="Train 3 must be on for train 4 to be on")
-    def eq_train_3_on_train_4_on(b, i):
-        return b.fs.mp.blocks[i].process.fs.train_3_on >= b.fs.mp.blocks[i].process.fs.train_4_on
-
-    # # Constraint disallowing off state for only one hour
-    # @m.Constraint(range(n_time_points), doc="Trains cannot be on for only one hour")
-    # def eq_no_one_hour_on_train3(b, i):
-    #     if i < 2:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[i].process.fs.train_3_on * b.fs.mp.blocks[i - 1].process.fs.train_3_on >= b.fs.mp.blocks[i].process.fs.train_3_on - b.fs.mp.blocks[i-2].process.fs.train_3_on
-
-    # @m.Constraint(range(n_time_points), doc="Trains cannot be on for only one hour")
-    # def eq_no_one_hour_on_train4(b, i):
-    #     if i < 2:
-    #         return Constraint.Skip
-    #     return b.fs.mp.blocks[i].process.fs.train_4_on * b.fs.mp.blocks[i - 1].process.fs.train_4_on >= b.fs.mp.blocks[i].process.fs.train_4_on - b.fs.mp.blocks[i-2].process.fs.train_4_on
-
-    @m.Constraint(range(1, n_time_points - 1), doc="Disallow on-off-on pattern for train 3")
-    def eq_no_on_off_on_train3(b, i):
-        return (
-            b.fs.mp.blocks[i - 1].process.fs.train_3_on
-            + b.fs.mp.blocks[i + 1].process.fs.train_3_on
-            - b.fs.mp.blocks[i].process.fs.train_3_on
-            <= 1
-        )
-
-    @m.Constraint(range(1, n_time_points - 1), doc="Disallow on-off-on pattern for train 4")
-    def eq_no_on_off_on_train4(b, i):
-        return (
-            b.fs.mp.blocks[i - 1].process.fs.train_4_on
-            + b.fs.mp.blocks[i + 1].process.fs.train_4_on
-            - b.fs.mp.blocks[i].process.fs.train_4_on
-            <= 1
-        )
-
-    # Constraints to test the optimal solution
-    # Forcing this train to be off during peak hours
-    # @m.Constraint(range(n_time_points), doc="Constraint to test optimal solution")
-    # def eq_test_optimal_solution(b, i):
-    #     if i == 0:
-    #         return Constraint.Skip
-    #     if (i % 24) in peak_hours:
-    #         return b.fs.mp.blocks[i].process.fs.train_3_on == 0
-    #     else:
-    #         return Constraint.Skip 
-
 
     m.fs.fixed_demand_price = Param(
         initialize=demand_charges["fixed_demand_price"],
@@ -572,14 +564,14 @@ def create_wrd_mp(
     )
 
     m.fs.highest_demand = Var(
-        initialize=0,
+        initialize=1000,
         bounds=(0, None),
         units=pyunits.kW,
         doc="Demand during highest period of energy use",
     )
 
     m.fs.highest_on_peak_demand = Var(
-        initialize=0,
+        initialize=1000,
         bounds=(0, None),
         units=pyunits.kW,
         doc="Demand during highest period of energy use within the peak hours",
@@ -608,6 +600,7 @@ def create_wrd_mp(
     def eq_highest_on_peak_demand(b, i):
         return b.fs.highest_on_peak_demand >= b.fs.mp.blocks[i].process.fs.treatment_energy_rate
 
+
     # @m.Constraint(range(n_time_points), doc="Production should not change at midnight")
     # def eq_midnight_constraint_on_off(b, h):
     #     if h == 0 or (h % 24) != 0:
@@ -616,6 +609,12 @@ def create_wrd_mp(
     #         b.fs.mp.blocks[h].process.fs.train_3_on
     #         == b.fs.mp.blocks[h - 1].process.fs.train_3_on
     #     )
+    # Adding working hours, but not including the constraints because it's just a simulation.
+    non_working_hours_morning = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    non_working_hours_evening = [18, 19, 20, 21, 22, 23]
+    
+    # m.fs.non_working_hours_morning = [h for h in range(n_time_points) if (h % 24) in non_working_hours_morning]
+    # m.fs.non_working_hours_evening = [h for h in range(n_time_points) if (h % 24) in non_working_hours_evening]
 
 
     @m.Expression(doc="Total cost")
@@ -625,20 +624,8 @@ def create_wrd_mp(
             + b.fs.fixed_demand_charge
             + b.fs.on_peak_demand_charge
         )
-    
-    # Add constraint for every 24 hours of water production
-    m.fs.days = range(int(value(n_days)))
-    
-    # @m.Constraint(m.fs.days, doc="Daily production target for each 24-hour period")
-    # def daily_production_constraint(b, day):
-    #     start_idx = day * 24
-    #     end_idx = min((day + 1) * 24, n_time_points)
-    #     return (
-    #         sum([b.fs.mp.blocks[i].process.fs.total_water_production for i in range(start_idx, end_idx)])
-    #         >= pyunits.convert(daily_production_target * pyunits.days, to_units=pyunits.m**3)
-    #     )
-    
-    @m.Constraint(doc="Total production")
+
+    @m.Expression(doc="Total production")
     def total_production(b):
         return (
             sum(
@@ -648,7 +635,6 @@ def create_wrd_mp(
                     for i in range(n_time_points)
                 ]
             )
-            >= pyunits.convert(total_water_production_target, to_units=pyunits.m**3)
         )
 
     # Set objective
@@ -661,80 +647,108 @@ def plot_function(m, n_time_points, season):
 
     time = np.linspace(0, n_time_points - 1, n_time_points)
 
-    fig, (ax, ax_trains) = plt.subplots(2, 1, figsize=(10, 8))
-    
-    # First subplot: Total production, electricity price, and energy
-    ax.plot(time + 0.5, prod, label="Water Production (m3/hr)", color="blue", marker="o")
-    ax.set_ylim(0, 3000)
-    ax1 = ax.twinx()
+    fig, (ax, ax_demand, ax_trains) = plt.subplots(3, 1, figsize=(12, 12))
 
-    ax1.plot(time + 0.5, elec_price, label="Electricity Price", color="black", marker="o")
-    ax1.set_ylim(0, 0.4)
-
-    ax2 = ax.twinx()
-    ax2.plot(time + 0.5, energy, label="Energy Consumption", color="orange", marker="o")
-    ax2.spines["right"].set_position(("outward", 55))
-    ax2.set_ylim(0, 2500)
-
-    if season == "summer":
-        for i in range(int(n_time_points/24)):
-            ax2.axvspan(24*i, 24*i+16, facecolor="lemonchiffon", alpha=0.3, label="Off Peak" if i == 0 else "_nolegend_", zorder=0)
-            ax2.axvspan(24*i+16, 24*i+21, facecolor="gold", alpha=0.3, label="On Peak" if i == 0 else "_nolegend_", zorder=0)
-            ax2.axvspan(24*i+21, 24*i+24, facecolor="lemonchiffon", alpha=0.3, label = "_nolegend_", zorder=0)
-    elif season == "winter":
-        for i in range(int(n_time_points/24)):
-            ax2.axvspan(24*i, 8 + 24*i, facecolor="khaki", alpha=0.3, label="Off Peak" if i == 0 else "_nolegend_", zorder=0)
-            ax2.axvspan(8 + 24*i, 16 + 24*i, facecolor="lemonchiffon", alpha=0.3, label="Super Off Peak" if i == 0 else "_nolegend_", zorder=0)
-            ax2.axvspan(16 + 24*i, 21 + 24*i, facecolor="gold", alpha=0.3, label="Mid Peak" if i == 0 else "_nolegend_", zorder=0)
-            ax2.axvspan(21 + 24*i, 24 + 24*i, facecolor="khaki", alpha=0.3, label = "_nolegend_", zorder=0)
-
-    ax.axhline(y=53150 / 24, label="Maximum Production Capacity (m3/h)")
-
-    handle, label = ax.get_legend_handles_labels()
-    handle1, label1 = ax1.get_legend_handles_labels()
-    handle2, label2 = ax2.get_legend_handles_labels()
-
-    handles = handle + handle1 + handle2
-    labels = label + label1 + label2
-
-    leg = ax2.legend(handles=handles, labels=labels, loc="upper left", framealpha=1.0, ncol=2, fontsize=11)
-    leg.set_zorder(1000)
-    leg.get_frame().set_facecolor("white")   # optional, keeps it clean
-    ax.set_ylabel("Water production (m3/h)", fontsize=12)
-    ax1.set_ylabel("Electricity Price (2021 $/kWh)", fontsize=11)
-    ax2.set_ylabel("Energy Consumption (kWh)", fontsize=11)
-    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
+    # First subplot: Energy consumption (left) + Grid cost (right)
+    electricity_cost = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.electricity_price,
+                to_units=CURRENCY_UNIT/pyunits.kWh,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+    ax.plot(time + 0.5, energy, label="Energy Consumption (kWh)", color="orange", marker="o")
+    ax.set_ylim(0, 2500)
+    ax.set_ylabel("Energy Consumption (kWh)", fontsize=12)
     ax.set_xlabel("Hours", fontsize=12)
-    ax.set_title(season+ " Modular Shutdown Scenario", fontsize=14)
-    # Tick labels (all axes)
-    for a in (ax, ax1, ax2, ax_trains):
-        a.tick_params(axis="both", labelsize= 11)
+    ax.set_title("Modular Shutdown + Variable Flowrate Scenario", fontsize=14, fontweight="bold")
+    ax.grid(False)
 
+    ax_grid = ax.twinx()
+    ax_grid.plot(time + 0.5, electricity_cost, label="Electricity Cost ($/kWh)", color="black", linestyle="-", linewidth=2)
+    ax_grid.set_ylabel("Electricity Cost ($/kWh)", fontsize=12)
+    ax_grid.set_ylim(0, 0.17)
 
-    # Extract RO train flow rates and convert to % of max flow
+    for i in range(int(n_time_points/24)):
+        ax.axvspan(24*i, 24*i+8, facecolor="grey", alpha=0.1, label="Nonworking Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax.axvspan(24*i+8, 24*i+18, facecolor="gold", alpha=0.3, label="Working Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax.axvspan(24*i+18, 24*i+24, facecolor="grey", alpha=0.1, label="_nolegend_", zorder=0)
+
+    handle1, label1 = ax.get_legend_handles_labels()
+    handle2, label2 = ax_grid.get_legend_handles_labels()
+    handles = [handle2[0], handle1[0], handle1[1], handle1[2]]
+    labels = [label2[0], label1[0], label1[1], label1[2]]
+    leg = ax_grid.legend(handles, labels, loc="lower left", framealpha=1.0, ncol=2, fontsize=11)
+    leg.set_zorder(1000)
+    leg.get_frame().set_facecolor("white")
+
+    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
+
+    # Second subplot: Demand charges (placeholder)
+    fixed_line = ax_demand.plot(time + 0.5, [value(m.fs.fixed_demand_price)]*n_time_points, label="Fixed Demand Charge", color="red", linestyle="-",linewidth=2)
+    on_peak_demand_profile = [
+        value(m.fs.on_peak_demand_price) if i in m.fs.peak_hours else 0
+        for i in range(n_time_points)
+    ]
+    on_peak_line = ax_demand.plot(time + 0.5, on_peak_demand_profile, label="On-Peak Demand Charge", color="purple", linestyle="-",linewidth=2)
+    
+    for i in range(int(n_time_points/24)):
+        ax_demand.axvspan(24*i, 24*i+8, facecolor="grey", alpha=0.1, label="Nonworking Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax_demand.axvspan(24*i+8, 24*i+18, facecolor="gold", alpha=0.3, label="Working Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax_demand.axvspan(24*i+18, 24*i+24, facecolor="grey", alpha=0.1, label="_nolegend_", zorder=0)
+
+    ax_demand.legend(handles=[fixed_line[0], on_peak_line[0]], loc="lower left", fontsize=11, framealpha=1.0)
+    ax_demand.xaxis.set_major_locator(plt.MaxNLocator(24))
+    ax_demand.set_ylabel("Demand Charge ($/kW)", fontsize=12)
+
+    # Third subplot: Water production (left) + RO train flow rates % (right)
     max_train_flow = 53150 / 24 / 4  # m3/hr
     train_1_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_1()*m.fs.mp.blocks[i].process.fs.train_1_on() / max_train_flow * 100 for i in range(n_time_points)]
     train_2_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_2()*m.fs.mp.blocks[i].process.fs.train_2_on() / max_train_flow * 100 for i in range(n_time_points)]
     train_3_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_3()*m.fs.mp.blocks[i].process.fs.train_3_on() / max_train_flow * 100 for i in range(n_time_points)]
     train_4_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_4()*m.fs.mp.blocks[i].process.fs.train_4_on() / max_train_flow * 100 for i in range(n_time_points)]
     train_flows = [train_1_flows, train_2_flows, train_3_flows, train_4_flows]
-    
-    # Second subplot: RO train flow rates as % of max flow
-    ax_trains.plot(time + 0.5, train_flows[0], label="RO Train 1", marker="o", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[1], label="RO Train 2", marker="s", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[2], label="RO Train 3", marker="^", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[3], label="RO Train 4", marker="d", linewidth=2)
-    
-    ax_trains.set_ylabel("Flow Rate (% of Max)",fontsize=12)
-    ax_trains.set_xlabel("Hours", fontsize=12)
-    ax_trains.set_title("RO Train Flow Rates as % of Maximum", fontsize=14)
-    ax_trains.set_ylim(0, 110)
-    ax_trains.axhline(y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity",zorder=0)
-    ax_trains.legend(loc="lower left", fontsize=11)
-    ax_trains.grid(True, alpha=0.3)
+
+    ax_trains.plot(time + 0.5, prod, label="Water Production (m3/hr)", color="blue", marker="o")
+    ax_trains.set_ylim(0, 2500)
+    ax_trains.axhline(y=53150 / 24, color="blue", linestyle="--", linewidth=2, alpha=0.5, label="Maximum Production Capacity (m3/h)", zorder=0)
+    ax_trains.set_ylabel("Water Production (m3/h)", fontsize=12)
+    # ax_trains.set_xlabel("Hours", fontsize=12)
+    # ax_trains.set_title("Water Production & RO Train Flow Rates", fontsize=14)
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
-    ax_trains.tick_params(axis="both", labelsize= 11)
+    ax_trains.grid(False)
+
+    ax_trains2 = ax_trains.twinx()
+    ax_trains2.plot(time + 0.5, train_flows[0], label="RO Train 1", marker="o", linewidth=2)
+    ax_trains2.plot(time + 0.5, train_flows[1], label="RO Train 2", marker="s", linewidth=2)
+    ax_trains2.plot(time + 0.5, train_flows[2], label="RO Train 3", marker="^", linewidth=2)
+    ax_trains2.plot(time + 0.5, train_flows[3], label="RO Train 4", marker="d", linewidth=2)
+    ax_trains2.axhline(y=100, color="red", linestyle="--", linewidth=2, alpha=0.5, label="Max Capacity", zorder=0)
+    ax_trains2.set_ylim(0, 125)
+    ax_trains2.set_ylabel("Flow Rate (% of Max)", fontsize=12)
+
+    for i in range(int(n_time_points/24)):
+        ax_trains2.axvspan(24*i, 24*i+8, facecolor="grey", alpha=0.1, label="Nonworking Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax_trains2.axvspan(24*i+8, 24*i+18, facecolor="gold", alpha=0.3, label="Working Hours" if i == 0 else "_nolegend_", zorder=0)
+        ax_trains2.axvspan(24*i+18, 24*i+24, facecolor="grey", alpha=0.1, label="_nolegend_", zorder=0)
+
+    handle_t, label_t = ax_trains.get_legend_handles_labels()
+    handle_t2, label_t2 = ax_trains2.get_legend_handles_labels()
+    leg3 = ax_trains2.legend(handle_t + handle_t2, label_t + label_t2, loc="lower left", fontsize=11, framealpha=1.0,ncol=2)
+    leg3.get_frame().set_facecolor("white")
+
+    for a in (ax, ax_demand, ax_trains):
+        a.set_xlim(0, n_time_points)
+        a.xaxis.set_major_locator(plt.MaxNLocator(24))
+
+    # Tick labels (all axes)
+    for a in (ax, ax_grid, ax_demand, ax_trains, ax_trains2):
+        a.tick_params(axis="both", labelsize=11)
+
     fig.tight_layout()
+    fig.savefig(f"wrd_{season}_baseline.png", dpi=600)
     plt.show()
 
 
@@ -745,39 +759,16 @@ def print_unfixed_vars(model):
             print(f"  {v.name}")
 
 
-def plot_grid_cost_over_time(m, n_time_points, season=None):
-    time = np.arange(n_time_points)
-    grid_cost = [
-        value(
-            pyunits.convert(
-                m.fs.mp.blocks[i].process.fs.grid_cost,
-                to_units=CURRENCY_UNIT,
-            )
-        )
-        for i in range(n_time_points)
-    ]
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(time + 0.5, grid_cost, marker="o", linewidth=1.5, color="tab:green")
-    ax.set_xlabel("Hours")
-    ax.set_ylabel("Grid Cost (2021 $/hr)")
-    title = "Grid Cost Over Time"
-    if season is not None:
-        title = f"{title} - {season.capitalize()}"
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
-    fig.tight_layout()
-    plt.show()
-
-
 if __name__ == "__main__":
-    n_days = 7
-    n_time_points = 24 * n_days
-    daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 0.70 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
+    schedule_csv = r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_variable_sim.csv"
+    season = "summer"
+    tee = True
 
-    season = 'summer'
+    train_schedule = load_train_schedule(schedule_csv)
+    n_time_points = len(train_schedule)
+    if n_time_points == 0:
+        raise ValueError("Schedule CSV must contain at least one row.")
+    n_days = n_time_points / 24
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
@@ -792,10 +783,10 @@ if __name__ == "__main__":
         n_days=n_days,
         n_time_points=n_time_points,
         elec_price=elec_price,
-        daily_production_target=daily_production_target,
-        total_water_production_target=total_water_production_target,
+        train_schedule=train_schedule,
         peak_hours=peak_hours,
         demand_charges=demand_charges,
+
     )
     assert_units_consistent(m)
     # print_unfixed_vars(m)
@@ -817,9 +808,22 @@ if __name__ == "__main__":
     # )
     solver = SolverFactory("glpk")
     # Practical stopping criteria for long-horizon MILPs
-    solver.options["mipgap"] = 0.01
+    solver.options["mipgap"] = 0.005
     solver.options["tmlim"] = 180
-    results = solver.solve(m, tee=True)
+    results = solver.solve(m, tee=tee)
+
+    solver_status = results.solver.status
+    termination = results.solver.termination_condition
+    if not (
+        solver_status == SolverStatus.ok
+        and termination in (TerminationCondition.optimal, TerminationCondition.feasible)
+    ):
+        raise RuntimeError(
+            "Simulation solve failed. "
+            f"Solver status={solver_status}, termination={termination}. "
+            "This often indicates an inconsistent schedule row "
+            "(e.g., train_on=1 with flow_pct<85)."
+        )
 
     prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
     energy = [
@@ -832,12 +836,10 @@ if __name__ == "__main__":
         for i in range(n_time_points)
     ]
     
-    
     print(degrees_of_freedom(m))
 
     print("-"*10,"Ouputs over Period","-"*10)
     print("Total production in m3:", m.total_production())
-    print("Total target water production in m3:", total_water_production_target())
     print("Total energy consumption in kWh:", m.fs.mp.blocks[n_time_points - 1].process.fs.acc_energy())
     
     print("-"*10,"Monthly Costs","-"*10)
@@ -848,4 +850,4 @@ if __name__ == "__main__":
 
     plot_function(m, n_time_points, season)
     # plot_grid_cost_over_time(m, n_time_points, season)
-    
+

@@ -766,9 +766,9 @@ if __name__ == "__main__":
     n_days = 7
     n_time_points = 24 * n_days
     daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 0.75 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
+    total_water_production_target = 0.65 * 53150 * pyunits.m**3/pyunits.day * n_days * pyunits.day
 
-    season = 'winter'
+    season = 'summer'
 
     if season == "winter":
         elec_price = build_elec_price_winter(n=n_time_points)
@@ -809,7 +809,7 @@ if __name__ == "__main__":
     # )
     solver = SolverFactory("glpk")
     # Practical stopping criteria for long-horizon MILPs
-    solver.options["mipgap"] = 0.005
+    solver.options["mipgap"] = 0.025
     solver.options["tmlim"] = 180
     results = solver.solve(m, tee=True)
 

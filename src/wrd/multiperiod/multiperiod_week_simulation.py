@@ -290,6 +290,7 @@ def unfix_dof(m):
     # m.fs.train_4_on.unfix()
     return None
 
+
 def initialize_mp(m):
     print("Initializing multi-period model...")
     # Check if first time step
@@ -458,7 +459,6 @@ def create_wrd_mp(
     return m
 
 
-
 def plot_function(m, n_time_points, season):
 
     time = np.linspace(0, n_time_points - 1, n_time_points)
@@ -541,7 +541,6 @@ def print_unfixed_vars(model):
             print(f"  {v.name}")
 
 
-
 if __name__ == "__main__":
 
     n_days = 7
@@ -588,4 +587,3 @@ if __name__ == "__main__":
 
     plot_function(m, n_time_points, season)
 
-    
