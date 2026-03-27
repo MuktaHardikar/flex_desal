@@ -152,7 +152,7 @@ def build_wrd_flowsheet(
     total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h  # m3 per hour
     train_production_capacity = total_plant_production_capacity / 4   # m3 per hour per train
     max_ro_train_power = (
-        0.837 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 179.4
+        0.7421 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 169.73
     ) * pyunits.kW
     max_uf_power = (
         0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 30.0
@@ -259,7 +259,7 @@ def build_wrd_flowsheet(
     def calculate_ro_power(flow, train_on):
         # Linear train power model (kW): 0 when train is off, fitted line when on
         return (
-            0.837 * flow / (pyunits.m**3 / pyunits.hr) - 179.4 * train_on
+            0.7421 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 169.73
         ) * pyunits.kW
 
     def calculate_uf_power(flow,uf_on):
@@ -398,7 +398,7 @@ def create_wrd_mp(
     total_plant_production_capacity = 53150 / 24 * pyunits.m**3 / pyunits.h
     train_production_capacity = total_plant_production_capacity / 4
     max_ro_train_power = (
-        0.837 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 179.4
+        0.7421 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 169.73
     ) * pyunits.kW
     max_uf_power = (
         0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 30.0
