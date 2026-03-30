@@ -302,6 +302,20 @@ def build_wrd_flowsheet(
         doc="Binary variable indicating if RO train 4 is on",
     )
 
+    m.fs.uf_on = Var(
+        initialize=1,
+        domain=Binary,
+        doc="Binary variable indicating if UF is on (1 if any RO train is on)",
+    )
+
+    @m.Constraint(TRAIN_IDS, doc="UF must be on if any RO train is on")
+    def eq_uf_on_lb(b, train_id):
+        return b.fs.uf_on >= getattr(b.fs, f"train_{train_id}_on")
+
+    @m.Constraint(doc="UF can only be on when at least one RO train is on")
+    def eq_uf_on_ub(b):
+        return b.fs.uf_on <= sum(getattr(b.fs, f"train_{train_id}_on") for train_id in TRAIN_IDS)
+
     # Constraint defining the flowrates based on input file
     @m.Constraint(doc="Upper bound for flow depends on the binary variable")
     def eq_train_1_ub(b):
@@ -375,7 +389,7 @@ def build_wrd_flowsheet(
             + calculate_ro_power(b.fs.water_production_ro_train_2, b.fs.train_2_on)
             + calculate_ro_power(b.fs.water_production_ro_train_3, b.fs.train_3_on)
             + calculate_ro_power(b.fs.water_production_ro_train_4, b.fs.train_4_on)
-            # + calculate_uf_power(b.fs.total_water_production,b.fs.train_1_on)
+            + calculate_uf_power(b.fs.total_water_production, b.fs.uf_on)
         )
 
     
@@ -760,7 +774,7 @@ def print_unfixed_vars(model):
 
 
 if __name__ == "__main__":
-    schedule_csv = r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_variable_sim.csv"
+    schedule_csv = r"src\wrd\multiperiod\basic_scenarios_3_5_25\real_operation_Aug_2021.csv"
     season = "summer"
     tee = True
 
