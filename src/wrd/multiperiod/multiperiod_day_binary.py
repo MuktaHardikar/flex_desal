@@ -333,7 +333,7 @@ if __name__ == "__main__":
         elec_price=elec_price,
     )
     # solver = get_solver()
-    solver = SolverFactory('mindtpy')
+    solver = SolverFactory("mindtpy")
     results = solver.solve(mp)
 
     flow_100 = [mp.blocks[i].process.fs.flow_100() for i in range(n_time_points)]
