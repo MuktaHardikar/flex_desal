@@ -113,51 +113,52 @@ def build_elec_price_winter(n):
 
 
 def build_wrd_flowsheet(
-        m=None, 
-        elec_price=0.1,
+    m=None,
+    elec_price=0.1,
 ):
-    
-    if m is None:
-        m = ConcreteModel()  
 
-    
+    if m is None:
+        m = ConcreteModel()
+
     m.fs = FlowsheetBlock(dynamic=False)
 
     total_plant_production_capacity = 14.8 / 24  # m3 per hour
-    train_production_capacity = total_plant_production_capacity / 4  # m3 per hour per train
+    train_production_capacity = (
+        total_plant_production_capacity / 4
+    )  # m3 per hour per train
 
     m.fs.total_water_production = Var(
-        initialize = total_plant_production_capacity,
-        bounds = (total_plant_production_capacity / 2, total_plant_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        initialize=total_plant_production_capacity,
+        bounds=(total_plant_production_capacity / 2, total_plant_production_capacity),
+        units=pyunits.m**3 / pyunits.h,
         doc="Water produced in a hour in m3",
     )
-    
+
     m.fs.water_production_ro_train_1 = Var(
-        initialize = train_production_capacity,
-        bounds=(train_production_capacity*0.6, train_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        initialize=train_production_capacity,
+        bounds=(train_production_capacity * 0.6, train_production_capacity),
+        units=pyunits.m**3 / pyunits.h,
         doc="Volume of water treated by RO train 1",
     )
 
     m.fs.water_production_ro_train_2 = Var(
-        initialize = train_production_capacity,
-        bounds=(train_production_capacity*0.6, train_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        initialize=train_production_capacity,
+        bounds=(train_production_capacity * 0.6, train_production_capacity),
+        units=pyunits.m**3 / pyunits.h,
         doc="Volume of water treated by RO train 2",
     )
 
     m.fs.water_production_ro_train_3 = Var(
         initialize=train_production_capacity,
-        bounds=(train_production_capacity*0.6, train_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        bounds=(train_production_capacity * 0.6, train_production_capacity),
+        units=pyunits.m**3 / pyunits.h,
         doc="Volume of water treated by RO train 3",
     )
 
     m.fs.water_production_ro_train_4 = Var(
         initialize=train_production_capacity,
-        bounds=(train_production_capacity*0.6, train_production_capacity),
-        units = pyunits.m**3/pyunits.h,
+        bounds=(train_production_capacity * 0.6, train_production_capacity),
+        units=pyunits.m**3 / pyunits.h,
         doc="Volume of water treated by RO train 4",
     )
 
@@ -175,13 +176,13 @@ def build_wrd_flowsheet(
     )
 
     m.fs.train_3_on = Var(
-        initialize=1,       
+        initialize=1,
         domain=Binary,
         doc="Binary variable indicating if RO train 3 is on",
     )
 
     m.fs.train_4_on = Var(
-        initialize=1,   
+        initialize=1,
         domain=Binary,
         doc="Binary variable indicating if RO train 4 is on",
     )
@@ -196,12 +197,10 @@ def build_wrd_flowsheet(
             + b.fs.water_production_ro_train_3 * b.fs.train_3_on
             + b.fs.water_production_ro_train_4 * b.fs.train_4_on
         )
-    
 
-    # Function to calculate energy consumption per m3 of water treated. 
+    # Function to calculate energy consumption per m3 of water treated.
     def calculate_energy_intensity(flow):
-        return (2E-06*flow**2 - 0.0026*flow + 1.1007)
-
+        return 2e-06 * flow**2 - 0.0026 * flow + 1.1007
 
     m.fs.treatment_energy_per_m3 = Var(
         initialize=0.48,
@@ -212,14 +211,24 @@ def build_wrd_flowsheet(
     # Constraint to calculate treatment energy per m3 based on flow through each train
     @m.Constraint(doc="Calculate treatment energy per m3")
     def eq_treatment_energy_per_m3(b):
-        return b.fs.treatment_energy_per_m3 == (
-            calculate_energy_intensity(b.fs.water_production_ro_train_1) * b.fs.water_production_ro_train_1 * b.fs.train_1_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_2) * b.fs.water_production_ro_train_2 * b.fs.train_2_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_3) * b.fs.water_production_ro_train_3 * b.fs.train_3_on
-            + calculate_energy_intensity(b.fs.water_production_ro_train_4) * b.fs.water_production_ro_train_4 * b.fs.train_4_on
-        ) / b.fs.total_water_production
-
-    
+        return (
+            b.fs.treatment_energy_per_m3
+            == (
+                calculate_energy_intensity(b.fs.water_production_ro_train_1)
+                * b.fs.water_production_ro_train_1
+                * b.fs.train_1_on
+                + calculate_energy_intensity(b.fs.water_production_ro_train_2)
+                * b.fs.water_production_ro_train_2
+                * b.fs.train_2_on
+                + calculate_energy_intensity(b.fs.water_production_ro_train_3)
+                * b.fs.water_production_ro_train_3
+                * b.fs.train_3_on
+                + calculate_energy_intensity(b.fs.water_production_ro_train_4)
+                * b.fs.water_production_ro_train_4
+                * b.fs.train_4_on
+            )
+            / b.fs.total_water_production
+        )
 
     m.fs.acc_production = Var(
         initialize=0,
@@ -258,18 +267,24 @@ def build_wrd_flowsheet(
 
     @m.Constraint(doc="Constraint to accumulate water production")
     def eq_acc_water_prod(b):
-        return b.fs.acc_production == b.fs.pre_acc_production + b.fs.total_water_production
+        return (
+            b.fs.acc_production == b.fs.pre_acc_production + b.fs.total_water_production
+        )
 
     @m.Constraint(doc="Constraint to calculate total energy consumption")
     def eq_acc_energy(b):
         return (
             b.fs.acc_energy
-            == b.fs.pre_acc_energy + b.fs.total_water_production * b.fs.treatment_energy_per_m3
+            == b.fs.pre_acc_energy
+            + b.fs.total_water_production * b.fs.treatment_energy_per_m3
         )
 
     @m.Constraint(doc="Grid cost")
     def eq_grid_cost(b):
-        return b.fs.grid_cost == elec_price * b.fs.total_water_production * b.fs.treatment_energy_per_m3
+        return (
+            b.fs.grid_cost
+            == elec_price * b.fs.total_water_production * b.fs.treatment_energy_per_m3
+        )
 
     return m
 
@@ -294,10 +309,10 @@ def unfix_dof(m):
 def initialize_mp(m):
     print("Initializing multi-period model...")
     # Check if first time step
-    m.fs.water_production_ro_train_1.fix(14.8/24/4)
-    m.fs.water_production_ro_train_2.fix(14.8/24/4)
-    m.fs.water_production_ro_train_3.fix(14.8/24/4*0.6)
-    m.fs.water_production_ro_train_4.fix(14.8/24/4*0.6)
+    m.fs.water_production_ro_train_1.fix(14.8 / 24 / 4)
+    m.fs.water_production_ro_train_2.fix(14.8 / 24 / 4)
+    m.fs.water_production_ro_train_3.fix(14.8 / 24 / 4 * 0.6)
+    m.fs.water_production_ro_train_4.fix(14.8 / 24 / 4 * 0.6)
 
     m.fs.train_1_on.fix(1)
     m.fs.train_2_on.fix(1)
@@ -306,11 +321,11 @@ def initialize_mp(m):
 
 
 def create_wrd_mp(
-    n_days = 1,
+    n_days=1,
     n_time_points=24,
     elec_price=elec_price,
-    daily_production_target=12 * pyunits.m**3/pyunits.day,
-    total_water_production_target=12 * pyunits.m**3/pyunits.day
+    daily_production_target=12 * pyunits.m**3 / pyunits.day,
+    total_water_production_target=12 * pyunits.m**3 / pyunits.day,
 ):
     """
     This function creates a multi-period flowsheet object for each month for the WRD plant. This object contains
@@ -358,7 +373,7 @@ def create_wrd_mp(
     for t in range(n_time_points):
         initialize_mp(m.fs.mp.blocks[t].process)
         unfix_dof(m.fs.mp.blocks[t].process)
-       
+
     m.fs.mp.blocks[0].process.fs.pre_acc_production.fix(0)
     m.fs.mp.blocks[0].process.fs.pre_acc_energy.fix(0)
 
@@ -366,28 +381,30 @@ def create_wrd_mp(
     # Non working hours
     non_working_hours_morning = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     non_working_hours_evening = [16, 17, 18, 19, 20, 21, 22, 23]
-    
-    m.fs.non_working_hours_morning = [h for h in range(n_time_points) if (h % 24) in non_working_hours_morning]
-    m.fs.non_working_hours_evening = [h for h in range(n_time_points) if (h % 24) in non_working_hours_evening]
+
+    m.fs.non_working_hours_morning = [
+        h for h in range(n_time_points) if (h % 24) in non_working_hours_morning
+    ]
+    m.fs.non_working_hours_evening = [
+        h for h in range(n_time_points) if (h % 24) in non_working_hours_evening
+    ]
 
     # m.fs.non_working_hours = non_working_hours
     # m.fs.working_hours = working_hours
 
-    
     # Constraints to keep production constant during non-working hours (skip at transitions)
     # @m.Constraint(m.fs.non_working_hours_morning, doc="Production constant during non-working hours")
     # def eq_non_working_hrs_morning(b, h):
     #     if h == 0: #or (h % 24)==0:
     #         return Constraint.Skip
     #     return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
-    
+
     # # Constraints to keep production constant during non-working hours (skip at transitions)
     # @m.Constraint(m.fs.non_working_hours_evening, doc="Production constant during non-working hours")
     # def eq_non_working_hrs_evening(b, h):
     #     # if h == 16 or (h % 24)==16:
     #     #     return Constraint.Skip
     #     return b.fs.mp.blocks[h].process.fs.total_water_production == b.fs.mp.blocks[h - 1].process.fs.total_water_production
-    
 
     # # Constraints to keep trains on/off state constant during non-working hours
     # @m.Constraint(non_working_hours, doc="Train 1 on/off state constant during non-working hours")
@@ -425,11 +442,11 @@ def create_wrd_mp(
     def total_cost(b):
         return sum(
             [b.fs.mp.blocks[i].process.fs.grid_cost for i in range(n_time_points)]
-            )
-    
+        )
+
     # Add constraint for every 24 hours of water production
     # m.fs.days = range(int(value(n_days)))
-    
+
     # @m.Constraint(m.fs.days, doc="Daily production target for each 24-hour period")
     # def daily_production_constraint(b, day):
     #     start_idx = day * 24
@@ -438,7 +455,7 @@ def create_wrd_mp(
     #         sum([b.fs.mp.blocks[i].process.fs.total_water_production for i in range(start_idx, end_idx)])
     #         >= pyunits.convert(daily_production_target * pyunits.days, to_units=pyunits.m**3)
     #     )
-    
+
     # @m.Constraint(doc="Total production")
     # def total_production(b):
     #     return (
@@ -452,7 +469,12 @@ def create_wrd_mp(
     @m.Expression(doc="Total production")
     def total_production(b):
         return (
-            sum([b.fs.mp.blocks[i].process.fs.total_water_production for i in range(n_time_points)])
+            sum(
+                [
+                    b.fs.mp.blocks[i].process.fs.total_water_production
+                    for i in range(n_time_points)
+                ]
+            )
             # == pyunits.convert(total_water_production_target, to_units=pyunits.m**3)
         )
 
@@ -464,7 +486,7 @@ def plot_function(m, n_time_points, season):
     time = np.linspace(0, n_time_points - 1, n_time_points)
 
     fig, (ax, ax_trains) = plt.subplots(2, 1, figsize=(10, 8))
-    
+
     # First subplot: Total production, electricity price, and energy
     ax.plot(time + 0.5, prod, label="Water Production (MG)", color="blue", marker="o")
     ax.set_ylim(0, 1)
@@ -510,23 +532,57 @@ def plot_function(m, n_time_points, season):
 
     # Extract RO train flow rates and convert to % of max flow
     max_train_flow = 14.8 / 24 / 4  # m3/hr
-    train_1_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_1()*m.fs.mp.blocks[i].process.fs.train_1_on() / max_train_flow * 100 for i in range(n_time_points)]
-    train_2_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_2()*m.fs.mp.blocks[i].process.fs.train_2_on() / max_train_flow * 100 for i in range(n_time_points)]
-    train_3_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_3()*m.fs.mp.blocks[i].process.fs.train_3_on() / max_train_flow * 100 for i in range(n_time_points)]
-    train_4_flows = [m.fs.mp.blocks[i].process.fs.water_production_ro_train_4()*m.fs.mp.blocks[i].process.fs.train_4_on() / max_train_flow * 100 for i in range(n_time_points)]
+    train_1_flows = [
+        m.fs.mp.blocks[i].process.fs.water_production_ro_train_1()
+        * m.fs.mp.blocks[i].process.fs.train_1_on()
+        / max_train_flow
+        * 100
+        for i in range(n_time_points)
+    ]
+    train_2_flows = [
+        m.fs.mp.blocks[i].process.fs.water_production_ro_train_2()
+        * m.fs.mp.blocks[i].process.fs.train_2_on()
+        / max_train_flow
+        * 100
+        for i in range(n_time_points)
+    ]
+    train_3_flows = [
+        m.fs.mp.blocks[i].process.fs.water_production_ro_train_3()
+        * m.fs.mp.blocks[i].process.fs.train_3_on()
+        / max_train_flow
+        * 100
+        for i in range(n_time_points)
+    ]
+    train_4_flows = [
+        m.fs.mp.blocks[i].process.fs.water_production_ro_train_4()
+        * m.fs.mp.blocks[i].process.fs.train_4_on()
+        / max_train_flow
+        * 100
+        for i in range(n_time_points)
+    ]
     train_flows = [train_1_flows, train_2_flows, train_3_flows, train_4_flows]
-    
+
     # Second subplot: RO train flow rates as % of max flow
-    ax_trains.plot(time + 0.5, train_flows[0], label="RO Train 1", marker="o", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[1], label="RO Train 2", marker="s", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[2], label="RO Train 3", marker="^", linewidth=2)
-    ax_trains.plot(time + 0.5, train_flows[3], label="RO Train 4", marker="d", linewidth=2)
-    
+    ax_trains.plot(
+        time + 0.5, train_flows[0], label="RO Train 1", marker="o", linewidth=2
+    )
+    ax_trains.plot(
+        time + 0.5, train_flows[1], label="RO Train 2", marker="s", linewidth=2
+    )
+    ax_trains.plot(
+        time + 0.5, train_flows[2], label="RO Train 3", marker="^", linewidth=2
+    )
+    ax_trains.plot(
+        time + 0.5, train_flows[3], label="RO Train 4", marker="d", linewidth=2
+    )
+
     ax_trains.set_ylabel("Flow Rate (% of Max)")
     ax_trains.set_xlabel("Hours")
     ax_trains.set_title("RO Train Flow Rates as % of Maximum")
     ax_trains.set_ylim(0, 110)
-    ax_trains.axhline(y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity")
+    ax_trains.axhline(
+        y=100, color="red", linestyle="--", linewidth=1, alpha=0.5, label="Max Capacity"
+    )
     ax_trains.legend(loc="best")
     ax_trains.grid(True, alpha=0.3)
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
@@ -545,8 +601,10 @@ if __name__ == "__main__":
 
     n_days = 7
     n_time_points = 24 * n_days
-    daily_production_target = 0 * pyunits.m**3/pyunits.day
-    total_water_production_target = 12 * pyunits.m**3/pyunits.day * n_days * pyunits.day
+    daily_production_target = 0 * pyunits.m**3 / pyunits.day
+    total_water_production_target = (
+        12 * pyunits.m**3 / pyunits.day * n_days * pyunits.day
+    )
 
     season = "winter"
     # season = 'summer'
@@ -570,15 +628,21 @@ if __name__ == "__main__":
     # solver = SolverFactory('mindtpy')
     results = solver.solve(m)
 
-    prod = [m.fs.mp.blocks[i].process.fs.total_water_production() for i in range(n_time_points)]
-    energy = [
-        value(
-            pyunits.convert(m.fs.mp.blocks[i].process.fs.total_water_production, to_units=pyunits.m**3/pyunits.h)
-        * m.fs.mp.blocks[i].process.fs.treatment_energy_per_m3 )
+    prod = [
+        m.fs.mp.blocks[i].process.fs.total_water_production()
         for i in range(n_time_points)
     ]
-    
-    
+    energy = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.total_water_production,
+                to_units=pyunits.m**3 / pyunits.h,
+            )
+            * m.fs.mp.blocks[i].process.fs.treatment_energy_per_m3
+        )
+        for i in range(n_time_points)
+    ]
+
     print(degrees_of_freedom(m))
 
     print("Total production in m3:", m.total_production())
@@ -586,4 +650,3 @@ if __name__ == "__main__":
     print("Total energy cost:", m.total_cost(), "2021 $")
 
     plot_function(m, n_time_points, season)
-
