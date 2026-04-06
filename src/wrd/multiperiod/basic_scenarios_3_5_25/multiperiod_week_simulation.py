@@ -245,12 +245,13 @@ def build_wrd_flowsheet(
         total_plant_production_capacity / 4
     )  # m3 per hour per train
     max_ro_train_power = (
-        0.7421 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 169.73
+        0.658 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 122.7
     ) * pyunits.kW
     max_uf_power = (
-        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 30.0
+        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 27.5
     ) * pyunits.kW
-    max_treatment_power = 4 * max_ro_train_power + max_uf_power
+    max_uv_power = (0.10 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr)) * pyunits.kW
+    max_treatment_power = 4 * max_ro_train_power + max_uf_power + max_uv_power
 
     m.fs.total_water_production = Var(
         initialize=total_plant_production_capacity,
@@ -405,12 +406,12 @@ def build_wrd_flowsheet(
 
     def calculate_ro_power(flow, train_on):
         # Linear train power model (kW): 0 when train is off, fitted line when on
-        return (0.7421 * flow / (pyunits.m**3 / pyunits.hr) - 169.73 * train_on) * pyunits.kW
+        return (0.658 * flow / (pyunits.m**3 / pyunits.hr) - 122.7 * train_on) * pyunits.kW
 
     def calculate_uf_power(flow, uf_on):
         # Linear UF power model (kW)
         # If train_1_on == 0, then the whole system is off and no power use from UF
-        return (0.199 * flow / (pyunits.m**3 / pyunits.hr) - 30.0 * uf_on) * pyunits.kW
+        return (0.199 * flow / (pyunits.m**3 / pyunits.hr) - 27.5 * uf_on) * pyunits.kW
 
     def calculate_UVAOP_power(flow):
         # Linear UVAOP power model (kW)
@@ -689,7 +690,7 @@ def create_wrd_mp(
                 for i in range(n_time_points)
             ]
         )
-
+    
     # Set objective
     m.fs.obj = Objective(expr=m.total_cost)
 
@@ -700,7 +701,12 @@ def plot_function(m, n_time_points, season):
 
     time = np.linspace(0, n_time_points - 1, n_time_points)
 
-    fig, (ax, ax_demand, ax_trains) = plt.subplots(3, 1, figsize=(12, 12))
+    fig, (ax, ax_demand, ax_trains) = plt.subplots(
+        3,
+        1,
+        figsize=(12, 12),
+        gridspec_kw={"height_ratios": [25, 25, 50]},
+    )
 
     # First subplot: Energy consumption (left) + Grid cost (right)
     electricity_cost = [
@@ -863,7 +869,11 @@ def plot_function(m, n_time_points, season):
     train_flows = [train_1_flows, train_2_flows, train_3_flows, train_4_flows]
 
     ax_trains.plot(
-        time + 0.5, prod, label="Water Production (m3/hr)", color="blue", marker="o"
+        time + 0.5,
+        prod,
+        label="Water Production (m$^3$/h)",
+        color="blue",
+        marker="o",
     )
     ax_trains.set_ylim(0, 2500)
     ax_trains.axhline(
@@ -872,10 +882,10 @@ def plot_function(m, n_time_points, season):
         linestyle="--",
         linewidth=2,
         alpha=0.5,
-        label="Maximum Production Capacity (m3/h)",
+        label="Maximum Production Capacity (m$^3$/h)",
         zorder=0,
     )
-    ax_trains.set_ylabel("Water Production (m3/h)", fontsize=12)
+    ax_trains.set_ylabel("Water Production (m$^3$/h)", fontsize=12)
     # ax_trains.set_xlabel("Hours", fontsize=12)
     # ax_trains.set_title("Water Production & RO Train Flow Rates", fontsize=14)
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
@@ -966,7 +976,7 @@ def print_unfixed_vars(model):
 
 if __name__ == "__main__":
     schedule_csv = (
-        r"src\wrd\multiperiod\basic_scenarios_3_5_25\real_operation_Aug_2021.csv"
+        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_sim.csv"
     )
     season = "summer"
     tee = True
@@ -1002,6 +1012,15 @@ if __name__ == "__main__":
     )
     assert_units_consistent(m)
     # print_unfixed_vars(m)
+    # Add a water demand value
+    aug_total_water = 1324527
+    m.total_demand = Param(
+        initialize = aug_total_water*0.98, mutable=True, units=pyunits.m**3, doc="Total water demand in m3"
+    ) 
+
+    @m.Constraint(doc="Total production must meet demand")
+    def eq_total_production(b):
+        return b.total_production >= b.total_demand
 
     # solver = get_solver()
     # solver = SolverFactory('mindtpy')
