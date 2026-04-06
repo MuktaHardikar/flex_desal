@@ -976,7 +976,7 @@ def print_unfixed_vars(model):
 
 if __name__ == "__main__":
     schedule_csv = (
-        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_sim.csv"
+        r"src\wrd\multiperiod\basic_scenarios_3_5_25\real_operation_Aug_2021.csv"
     )
     season = "summer"
     tee = True
