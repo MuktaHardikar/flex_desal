@@ -725,7 +725,7 @@ def plot_function(m, n_time_points, season):
     ax.set_ylabel("Energy Consumption (kWh)", fontsize=12)
     ax.set_xlabel("Hours", fontsize=12)
     ax.set_title(
-        "Modular Shutdown + Variable Flowrate Scenario", fontsize=14, fontweight="bold"
+        "Modular Shutdown Scenario", fontsize=14, fontweight="bold"
     )
     ax.grid(False)
 
@@ -976,7 +976,7 @@ def print_unfixed_vars(model):
 
 if __name__ == "__main__":
     schedule_csv = (
-        r"src\wrd\multiperiod\basic_scenarios_3_5_25\real_operation_Aug_2021.csv"
+        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_sim.csv"
     )
     season = "summer"
     tee = True
