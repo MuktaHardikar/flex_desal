@@ -406,16 +406,16 @@ def build_wrd_flowsheet(
 
     def calculate_ro_power(flow, train_on):
         # Linear train power model (kW): 0 when train is off, fitted line when on
-        return (0.658 * flow / (pyunits.m**3 / pyunits.hr) - 122.7 * train_on) * pyunits.kW
+        return (0.5207 * flow / (pyunits.m**3 / pyunits.hr) - 95.74 * train_on) * pyunits.kW
 
     def calculate_uf_power(flow, uf_on):
-        # Linear UF power model (kW)
+        # Linear UF SYSTEM power model (kW)
         # If train_1_on == 0, then the whole system is off and no power use from UF
-        return (0.199 * flow / (pyunits.m**3 / pyunits.hr) - 27.5 * uf_on) * pyunits.kW
+        return (0.199 * flow / (pyunits.m**3 / pyunits.hr) - 27.4 * uf_on) * pyunits.kW
 
     def calculate_UVAOP_power(flow):
         # Linear UVAOP power model (kW)
-        return (0.10 * flow / (pyunits.m**3 / pyunits.hr)) * pyunits.kW
+        return (0.101 * flow / (pyunits.m**3 / pyunits.hr)) * pyunits.kW
 
     @m.Constraint(doc="Calculate total treatment energy rate")
     def eq_treatment_energy_rate(b):
