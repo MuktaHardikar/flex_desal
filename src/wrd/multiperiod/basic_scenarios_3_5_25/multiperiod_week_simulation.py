@@ -169,20 +169,58 @@ def build_elec_price_summer(n):
     off_peak_gen = 0.08419
     super_off_peak_gen = 0
 
-    elec_price = np.ones(24)
+    weekday_elec_price = np.ones(24)
+    weekend_elec_price = np.ones(24)
 
     # off peak 12 AM - 4 PM
-    elec_price[0:16] = off_peak_del + off_peak_gen
+    weekday_elec_price[0:16] = off_peak_del + off_peak_gen
+    weekend_elec_price[0:16] = off_peak_del + off_peak_gen
     # on peak 4 PM - 9 PM
-    elec_price[16:21] = on_peak_del + on_peak_gen
+    weekday_elec_price[16:21] = on_peak_del + on_peak_gen
+    weekend_elec_price[16:21] = mid_peak_del + mid_peak_gen
     # off peak 9 PM - 12 AM
-    elec_price[21:24] = off_peak_del + off_peak_gen
+    weekday_elec_price[21:24] = off_peak_del + off_peak_gen
+    weekend_elec_price[21:24] = off_peak_del + off_peak_gen
 
-    # Repeat for the 7 days
-    if value(n) > 24:
-        elec_price = np.tile(elec_price, int(value(n) / 24))
+    total_hours = int(value(n))
+    if total_hours <= 0:
+        return np.array([]), []
 
-    return elec_price
+    # Build repeating weekly pattern assuming the horizon starts on a weekday.
+    daily_profiles = [
+        weekday_elec_price,
+        weekday_elec_price,
+        weekday_elec_price,
+        weekday_elec_price,
+        weekday_elec_price,
+        weekend_elec_price,
+        weekend_elec_price,
+    ]
+
+    full_days, rem_hours = divmod(total_hours, 24)
+
+    day_blocks = []
+    for day_idx in range(full_days):
+        day_blocks.append(daily_profiles[day_idx % 7])
+
+    if day_blocks:
+        elec_price = np.concatenate(day_blocks)
+    else:
+        elec_price = np.array([])
+
+    if rem_hours > 0:
+        next_day_profile = daily_profiles[full_days % 7]
+        elec_price = np.concatenate([elec_price, next_day_profile[:rem_hours]])
+
+    # Absolute hourly indices that fall in weekday on-peak window (16:00-21:00).
+    peak_hours = []
+    for h in range(total_hours):
+        day_of_week = (h // 24) % 7
+        hour_of_day = h % 24
+        if day_of_week < 5 and 16 <= hour_of_day <= 20:
+            peak_hours.append(h)
+
+    return elec_price, peak_hours
 
 
 def build_elec_price_winter(n):
@@ -212,7 +250,9 @@ def build_elec_price_winter(n):
 
     if value(n) > 24:
         elec_price = np.tile(elec_price, int(value(n) / 24))
-    return elec_price
+        peak_hours = [h for h in range(int(value(n))) if (h % 24) in range(16, 21)]
+
+    return elec_price, peak_hours
 
 
 def build_wrd_flowsheet(
@@ -643,7 +683,7 @@ def create_wrd_mp(
     def eq_highest_demand(b, i):
         return b.fs.highest_demand >= b.fs.mp.blocks[i].process.fs.treatment_energy_rate
 
-    m.fs.peak_hours = [h for h in range(n_time_points) if (h % 24) in peak_hours]
+    m.fs.peak_hours = peak_hours
 
     @m.Constraint(
         m.fs.peak_hours,
@@ -976,7 +1016,7 @@ def print_unfixed_vars(model):
 
 if __name__ == "__main__":
     schedule_csv = (
-        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_sim.csv"
+        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_variable_sim.csv"
     )
     season = "summer"
     tee = True
@@ -988,15 +1028,13 @@ if __name__ == "__main__":
     n_days = n_time_points / 24
 
     if season == "winter":
-        elec_price = build_elec_price_winter(n=n_time_points)
-        peak_hours = list(range(16, 21))
+        elec_price, peak_hours = build_elec_price_winter(n=n_time_points)
         demand_charges = {
             "fixed_demand_price": 19.62,
             "on_peak_demand_price": 7.99 + 2.55,
         }  # March 2023
     else:
-        elec_price = build_elec_price_summer(n=n_time_points)
-        peak_hours = list(range(16, 21))  # But only the weekdays actually!
+        elec_price, peak_hours = build_elec_price_summer(n=n_time_points)
         demand_charges = {
             "fixed_demand_price": 19.94,
             "on_peak_demand_price": 22.10 + 14.68,
