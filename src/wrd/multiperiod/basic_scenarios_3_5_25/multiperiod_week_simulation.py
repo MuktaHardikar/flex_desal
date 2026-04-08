@@ -290,7 +290,9 @@ def build_wrd_flowsheet(
     max_uf_power = (
         0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 27.5
     ) * pyunits.kW
-    max_uv_power = (0.10 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr)) * pyunits.kW
+    max_uv_power = (
+        0.10 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr)
+    ) * pyunits.kW
     max_treatment_power = 4 * max_ro_train_power + max_uf_power + max_uv_power
 
     m.fs.total_water_production = Var(
@@ -446,7 +448,9 @@ def build_wrd_flowsheet(
 
     def calculate_ro_power(flow, train_on):
         # Linear train power model (kW): 0 when train is off, fitted line when on
-        return (0.5207 * flow / (pyunits.m**3 / pyunits.hr) - 95.74 * train_on) * pyunits.kW
+        return (
+            0.5207 * flow / (pyunits.m**3 / pyunits.hr) - 95.74 * train_on
+        ) * pyunits.kW
 
     def calculate_uf_power(flow, uf_on):
         # Linear UF SYSTEM power model (kW)
@@ -730,7 +734,7 @@ def create_wrd_mp(
                 for i in range(n_time_points)
             ]
         )
-    
+
     # Set objective
     m.fs.obj = Objective(expr=m.total_cost)
 
@@ -764,9 +768,7 @@ def plot_function(m, n_time_points, season):
     ax.set_ylim(0, 2500)
     ax.set_ylabel("Energy Consumption (kWh)", fontsize=12)
     ax.set_xlabel("Hours", fontsize=12)
-    ax.set_title(
-        "Modular Shutdown Scenario", fontsize=14, fontweight="bold"
-    )
+    ax.set_title("Modular Shutdown Scenario", fontsize=14, fontweight="bold")
     ax.grid(False)
 
     ax_grid = ax.twinx()
@@ -1053,8 +1055,11 @@ if __name__ == "__main__":
     # Add a water demand value
     aug_total_water = 1324527
     m.total_demand = Param(
-        initialize = aug_total_water*0.98, mutable=True, units=pyunits.m**3, doc="Total water demand in m3"
-    ) 
+        initialize=aug_total_water * 0.98,
+        mutable=True,
+        units=pyunits.m**3,
+        doc="Total water demand in m3",
+    )
 
     @m.Constraint(doc="Total production must meet demand")
     def eq_total_production(b):
