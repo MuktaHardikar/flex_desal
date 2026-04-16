@@ -1009,6 +1009,74 @@ def plot_function(m, n_time_points, season):
     plt.show()
 
 
+def plot_function_top_fullsize(m, n_time_points, season):
+
+    time = np.linspace(0, n_time_points - 1, n_time_points)
+
+    energy_profile = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.treatment_energy_rate,
+                to_units=pyunits.kWh / pyunits.h,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+    electricity_cost = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.electricity_price,
+                to_units=CURRENCY_UNIT / pyunits.kWh,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+    energy_line = ax.plot(
+        time + 0.5,
+        energy_profile,
+        label="Energy Consumption (kWh)",
+        color="orange",
+        marker="o",
+    )
+    ax.set_ylim(0, 2500)
+    ax.set_ylabel("Energy Consumption (kWh)", fontsize=12)
+    ax.set_xlabel("Hours", fontsize=12)
+    ax.set_title("Energy Consumption and Cost - August 2021", fontsize=14, fontweight="bold")
+    ax.grid(False)
+    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
+
+    ax_grid = ax.twinx()
+    electricity_line = ax_grid.plot(
+        time + 0.5,
+        electricity_cost,
+        label="Electricity Cost ($/kWh)",
+        color="black",
+        linestyle="-",
+        linewidth=2,
+    )
+    ax_grid.set_ylabel("Electricity Cost ($/kWh)", fontsize=12)
+    ax_grid.set_ylim(0, 0.17)
+
+    ax_grid.legend(
+        handles=[electricity_line[0], energy_line[0]],
+        loc="lower left",
+        framealpha=1.0,
+        ncol=1,
+        fontsize=11,
+    )
+
+    for a in (ax, ax_grid):
+        a.set_xlim(0, n_time_points)
+        a.tick_params(axis="both", labelsize=11)
+
+    fig.tight_layout()
+    fig.savefig(f"wrd_{season}_top_fullsize.png", dpi=600)
+    plt.show()
+
+
 def print_unfixed_vars(model):
     print("Unfixed variables contributing to degrees of freedom:")
     for v in model.component_data_objects(ctype=Var, descend_into=True):
@@ -1138,4 +1206,4 @@ if __name__ == "__main__":
     print("Total electricity cost for month:", m.total_cost(), "2021 $")
 
     plot_function(m, n_time_points, season)
-    # plot_grid_cost_over_time(m, n_time_points, season)
+    plot_function_top_fullsize(m, n_time_points, season)
