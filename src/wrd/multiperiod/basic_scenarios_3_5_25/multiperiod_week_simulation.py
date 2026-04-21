@@ -1009,11 +1009,11 @@ def plot_function(m, n_time_points, season):
     plt.show()
 
 
-def plot_function_top_fullsize(m, n_time_points, season):
+def plot_function_top_w_real_energy_use(m, n_time_points, season):
 
     time = np.linspace(0, n_time_points - 1, n_time_points)
 
-    energy_profile = [
+    sim_energy_profile = [
         value(
             pyunits.convert(
                 m.fs.mp.blocks[i].process.fs.treatment_energy_rate,
@@ -1032,24 +1032,35 @@ def plot_function_top_fullsize(m, n_time_points, season):
         for i in range(n_time_points)
     ]
 
+    act_energy_profile = pd.read_csv(r"C:\Users\rchurchi\flex_desal\src\wrd\multiperiod\basic_scenarios_3_5_25\Aug_21_kW_hourly.csv")["total_energy_kW"].to_list()
+
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
-    energy_line = ax.plot(
+    sim_energy_line = ax.plot(
         time + 0.5,
-        energy_profile,
-        label="Energy Consumption (kWh)",
+        sim_energy_profile,
+        label= "Modeled Energy Consumption (kWh)",
         color="orange",
         marker="o",
     )
+
+    act_energy_line = ax.plot(
+        time + 0.5,
+        act_energy_profile,
+        label= "Energy Consumption Data (kWh)",
+        color="blue",
+        marker="s",
+    )
+
     ax.set_ylim(0, 2500)
-    ax.set_ylabel("Energy Consumption (kWh)", fontsize=12)
-    ax.set_xlabel("Hours", fontsize=12)
-    ax.set_title("Energy Consumption and Cost - August 2021", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Energy Consumption (kWh)", fontsize=16)
+    ax.set_xlabel("Hours", fontsize=16)
+    ax.set_title("Energy Consumption and Cost - August 2021", fontsize=18, fontweight="bold")
     ax.grid(False)
     ax.xaxis.set_major_locator(plt.MaxNLocator(24))
 
     ax_grid = ax.twinx()
-    electricity_line = ax_grid.plot(
+    electricity_cost_line = ax_grid.plot(
         time + 0.5,
         electricity_cost,
         label="Electricity Cost ($/kWh)",
@@ -1057,11 +1068,11 @@ def plot_function_top_fullsize(m, n_time_points, season):
         linestyle="-",
         linewidth=2,
     )
-    ax_grid.set_ylabel("Electricity Cost ($/kWh)", fontsize=12)
+    ax_grid.set_ylabel("Electricity Cost ($/kWh)", fontsize=16)
     ax_grid.set_ylim(0, 0.17)
 
     ax_grid.legend(
-        handles=[electricity_line[0], energy_line[0]],
+        handles=[electricity_cost_line[0], sim_energy_line[0], act_energy_line[0]],
         loc="lower left",
         framealpha=1.0,
         ncol=1,
@@ -1075,6 +1086,131 @@ def plot_function_top_fullsize(m, n_time_points, season):
     fig.tight_layout()
     fig.savefig(f"wrd_{season}_top_fullsize.png", dpi=600)
     plt.show()
+
+
+def plot_function_top_and_num_trains(m, n_time_points, season):
+    time = np.linspace(0, n_time_points - 1, n_time_points)
+
+    fig, (ax, ax_trains) = plt.subplots(
+        2,
+        1,
+        figsize=(12, 12),
+        gridspec_kw={"height_ratios": [1, 1]},
+    )
+
+    # First subplot: Energy consumption (left) + Grid cost (right)
+    electricity_cost = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.electricity_price,
+                to_units=CURRENCY_UNIT / pyunits.kWh,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+    energy = [
+        value(
+            pyunits.convert(
+                m.fs.mp.blocks[i].process.fs.treatment_energy_rate,
+                to_units=pyunits.kWh / pyunits.h,
+            )
+        )
+        for i in range(n_time_points)
+    ]
+
+    ax.plot(
+        time + 0.5, energy, label="Energy Consumption (kWh)", color="orange", marker="o"
+    )
+    ax.set_ylim(0, 2500)
+    ax.set_ylabel("Energy Consumption (kWh)", fontsize=14)
+    ax.set_xlabel("Hours", fontsize=16)
+    ax.set_title("Flexible Operations Scenario", fontsize=14, fontweight="bold")
+    ax.grid(False)
+
+    ax_grid = ax.twinx()
+    ax_grid.plot(
+        time + 0.5,
+        electricity_cost,
+        label="Electricity Cost ($/kWh)",
+        color="black",
+        linestyle="-",
+        linewidth=2,
+    )
+    ax_grid.set_ylabel("Electricity Cost ($/kWh)", fontsize=14)
+    ax_grid.set_ylim(0, 0.17)
+
+    handle1, label1 = ax.get_legend_handles_labels()
+    handle2, label2 = ax_grid.get_legend_handles_labels()
+    handles = [handle2[0], handle1[0]]
+    labels = [label2[0], label1[0]]
+    leg = ax_grid.legend(
+        handles, labels, loc="lower left", framealpha=1.0, ncol=2, fontsize=14
+    )
+    leg.set_zorder(1000)
+    leg.get_frame().set_facecolor("white")
+
+    ax.xaxis.set_major_locator(plt.MaxNLocator(24))
+
+    # Second subplot: Water production (left) + Number of trains in operation (right)
+    prod = [
+        m.fs.mp.blocks[i].process.fs.total_water_production()
+        for i in range(n_time_points)
+    ]
+    num_trains = [
+        value(m.fs.mp.blocks[i].process.fs.train_1_on())
+        + value(m.fs.mp.blocks[i].process.fs.train_2_on())
+        + value(m.fs.mp.blocks[i].process.fs.train_3_on())
+        + value(m.fs.mp.blocks[i].process.fs.train_4_on())
+        for i in range(n_time_points)
+    ]
+
+    ax_trains.plot(
+        time + 0.5,
+        prod,
+        label="Water Production (m$^3$/h)",
+        color="blue",
+        marker="o",
+        linewidth=2,
+    )
+    ax_trains.set_ylim(0, 2250)
+    ax_trains.set_ylabel("Water Production (m$^3$/h)", fontsize=14)
+    ax_trains.set_xlabel("Hours", fontsize=14)
+    ax_trains.grid(False)
+
+    ax_trains2 = ax_trains.twinx()
+    ax_trains2.plot(
+        time + 0.5, num_trains, label="RO Trains in Operation", color="red", marker="s", linewidth=2
+    )
+    ax_trains2.set_ylim(0, 5)
+    ax_trains2.set_ylabel("RO Trains in Operation", fontsize=14)
+    ax_trains2.set_yticks([0, 1, 2, 3, 4])
+
+    handle_prod, label_prod = ax_trains.get_legend_handles_labels()
+    handle_trains, label_trains = ax_trains2.get_legend_handles_labels()
+    leg2 = ax_trains2.legend(
+        handle_prod + handle_trains,
+        label_prod + label_trains,
+        loc="lower left",
+        fontsize=14,
+        framealpha=1.0,
+        ncol=2,
+    )
+    leg2.get_frame().set_facecolor("white")
+
+    ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
+
+    for a in (ax, ax_trains):
+        a.set_xlim(0, n_time_points)
+        a.xaxis.set_major_locator(plt.MaxNLocator(24))
+        a.tick_params(axis="both", labelsize=14)
+
+    ax_grid.tick_params(axis="both", labelsize=14)
+    ax_trains2.tick_params(axis="both", labelsize=14)
+
+    fig.tight_layout()
+    fig.savefig(f"wrd_{season}_top_and_num_trains.png", dpi=600)
+    plt.show()
+    
 
 
 def print_unfixed_vars(model):
@@ -1205,5 +1341,5 @@ if __name__ == "__main__":
     )
     print("Total electricity cost for month:", m.total_cost(), "2021 $")
 
-    plot_function(m, n_time_points, season)
-    plot_function_top_fullsize(m, n_time_points, season)
+    # plot_function(m, n_time_points, season)
+    plot_function_top_and_num_trains(m, n_time_points, season)
