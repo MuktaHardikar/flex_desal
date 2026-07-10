@@ -1342,4 +1342,5 @@ if __name__ == "__main__":
     print("Total electricity cost for month:", m.total_cost(), "2021 $")
 
     # plot_function(m, n_time_points, season)
-    plot_function_top_and_num_trains(m, n_time_points, season)
+    # plot_function_top_and_num_trains(m, n_time_points, season)
+    plot_function_top_w_real_energy_use(m, n_time_points, season)
