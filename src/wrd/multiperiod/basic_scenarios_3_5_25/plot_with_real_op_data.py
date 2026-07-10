@@ -164,9 +164,6 @@ def energy_data_plot(energy_csv, energy_col="total_energy_kW"):
     plt.show()
 
 
-
-
-
 def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
     """Calculate total energy costs for a given CSV of energy data."""
 
