@@ -114,7 +114,8 @@ def validation_plot(
     ax.set_xlim(0, n_time_points)
     ax.tick_params(axis="both", labelsize=11)
     fig.tight_layout()
-    fig.savefig(f"{csv_path.stem}_WRD_model_validation_Aug_2021.png", dpi=600)
+    output_path = Path(__file__).resolve().parent / f"{csv_path.stem}_WRD_model_validation_Aug_2021.png"
+    fig.savefig(output_path, dpi=600)
     plt.show()
 
 
@@ -163,7 +164,8 @@ def energy_data_plot(energy_csv, energy_col="total_energy_kW"):
     ax.set_xlim(0, n_time_points)
     ax.tick_params(axis="both", labelsize=11)
     fig.tight_layout()
-    fig.savefig(f"{csv_path.stem}_energy_data_plot.png", dpi=600)
+    output_path = Path(__file__).resolve().parent / f"{csv_path.stem}_energy_data_plot.png"
+    fig.savefig(output_path, dpi=600)
     plt.show()
 
 
@@ -271,7 +273,7 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
     }
 
 if __name__ == "__main__":
-    validation_plot()
+    # validation_plot()
     filename = "Aug_21_kW_hourly_week.csv"
-    # energy_data_plot(filename)
+    energy_data_plot(filename)
     # calc_energy_costs_summer(filename)
