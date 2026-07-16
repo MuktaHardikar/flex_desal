@@ -64,6 +64,9 @@ def validation_plot(
     actual_energy_csv=DEFAULT_ACTUAL_ENERGY_CSV,
 ):
     """Plot hard-coded simulated energy against actual plant data."""
+    csv_path = Path(actual_energy_csv)
+    if not csv_path.is_absolute():
+        csv_path = Path(__file__).resolve().parent / csv_path
 
     sim_energy_profile = calculate_sim_energy_profile(train_schedule)
     act_energy_profile = pd.read_csv(actual_energy_csv)["total_energy_kW"].to_list()
@@ -111,7 +114,7 @@ def validation_plot(
     ax.set_xlim(0, n_time_points)
     ax.tick_params(axis="both", labelsize=11)
     fig.tight_layout()
-    fig.savefig(f"WRD_model_validation_Aug_2021.png", dpi=600)
+    fig.savefig(f"{csv_path.stem}_WRD_model_validation_Aug_2021.png", dpi=600)
     plt.show()
 
 
@@ -268,7 +271,7 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
     }
 
 if __name__ == "__main__":
-    # validation_plot()
+    validation_plot()
     filename = "Aug_21_kW_hourly_week.csv"
     # energy_data_plot(filename)
-    calc_energy_costs_summer(filename)
+    # calc_energy_costs_summer(filename)
