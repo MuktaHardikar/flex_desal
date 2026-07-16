@@ -1,10 +1,9 @@
 """Standalone plotting helpers for comparing model-fit energy to plant data."""
 
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 
 TOTAL_PLANT_PRODUCTION_CAPACITY = 53150 / 24  # m3/hr
@@ -271,6 +270,7 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
         "variable_demand_cost": variable_demand_cost,
         "total_energy_kWh": total_energy_kWh,
     }
+
 
 if __name__ == "__main__":
     # validation_plot()

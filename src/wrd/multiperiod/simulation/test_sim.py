@@ -288,7 +288,7 @@ def build_wrd_flowsheet(
         0.658 * train_production_capacity / (pyunits.m**3 / pyunits.hr) - 122.7
     ) * pyunits.kW
     max_uf_power = (
-        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 27.5
+        0.199 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr) - 27.4
     ) * pyunits.kW
     max_uv_power = (
         0.10 * total_plant_production_capacity / (pyunits.m**3 / pyunits.hr)
@@ -1032,7 +1032,7 @@ def plot_function_top_w_real_energy_use(m, n_time_points, season):
         for i in range(n_time_points)
     ]
 
-    act_energy_profile = pd.read_csv(r"C:\Users\rchurchi\flex_desal\src\wrd\multiperiod\basic_scenarios_3_5_25\Aug_21_kW_hourly.csv")["total_energy_kW"].to_list()
+    act_energy_profile = pd.read_csv(r"C:\Users\rchurchi\flex_desal\src\wrd\multiperiod\figures\Aug_21_kW_hourly.csv")["total_energy_kW"].to_list()
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
@@ -1222,7 +1222,7 @@ def print_unfixed_vars(model):
 
 if __name__ == "__main__":
     schedule_csv = (
-        r"src\wrd\multiperiod\basic_scenarios_3_5_25\summer_modular_variable_sim.csv"
+        r"src\wrd\multiperiod\simulation\summer_modular_sim.csv"
     )
     season = "summer"
     tee = True
@@ -1342,5 +1342,4 @@ if __name__ == "__main__":
     print("Total electricity cost for month:", m.total_cost(), "2021 $")
 
     # plot_function(m, n_time_points, season)
-    # plot_function_top_and_num_trains(m, n_time_points, season)
-    plot_function_top_w_real_energy_use(m, n_time_points, season)
+    plot_function_top_and_num_trains(m, n_time_points, season)
