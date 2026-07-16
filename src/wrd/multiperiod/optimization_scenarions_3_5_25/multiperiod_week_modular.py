@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import logging
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 # Pyomo imports
 from pyomo.environ import ConcreteModel, Var, Param, units as pyunits, Objective
@@ -902,6 +903,8 @@ def plot_function(m, n_time_points, season):
     ax_trains.xaxis.set_major_locator(plt.MaxNLocator(24))
     ax_trains.tick_params(axis="both", labelsize=11)
     fig.tight_layout()
+    output_path = Path(__file__).resolve().parent / f"{Path(__file__).stem}_wrd_{season}_plant_shutdown.png"
+    fig.savefig(output_path, dpi=600)
     plt.show()
 
 
@@ -996,7 +999,7 @@ if __name__ == "__main__":
     # )
     solver = SolverFactory("glpk")
     # Practical stopping criteria for long-horizon MILPs
-    solver.options["mipgap"] = 0.01
+    solver.options["mipgap"] = 0.013
     solver.options["tmlim"] = 180
     results = solver.solve(m, tee=True)
 
