@@ -274,6 +274,6 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
 
 if __name__ == "__main__":
     # validation_plot()
-    filename = "Aug_21_kW_hourly_week.csv"
+    filename = "Oct_21_kW_hourly_week.csv"
     energy_data_plot(filename)
-    # calc_energy_costs_summer(filename)
+    calc_energy_costs_summer(filename)
