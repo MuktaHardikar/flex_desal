@@ -18,7 +18,10 @@ def calculate_sim_energy_profile(train_schedule):
     """Calculate simulated energy from the fitted linear rules in the model."""
 
     if not isinstance(train_schedule, pd.DataFrame):
-        train_schedule = pd.read_csv(train_schedule)
+        schedule_path = Path(train_schedule)
+        if not schedule_path.is_absolute():
+            schedule_path = Path(__file__).resolve().parent / schedule_path
+        train_schedule = pd.read_csv(schedule_path)
 
     required_cols = [
         *[f"train_{train_id}_on" for train_id in TRAIN_IDS],
@@ -68,7 +71,7 @@ def validation_plot(
         csv_path = Path(__file__).resolve().parent / csv_path
 
     sim_energy_profile = calculate_sim_energy_profile(train_schedule)
-    act_energy_profile = pd.read_csv(actual_energy_csv)["total_energy_kW"].to_list()
+    act_energy_profile = pd.read_csv(csv_path)["total_energy_kW"].to_list()
 
     if len(sim_energy_profile) != len(act_energy_profile):
         raise ValueError(
@@ -99,7 +102,7 @@ def validation_plot(
     ax.set_ylim(0, 2500)
     ax.set_ylabel("Energy Consumption (kWh)", fontsize=16)
     ax.set_xlabel("Hours", fontsize=16)
-    ax.set_title("Energy Consumption - August 2021", fontsize=18, fontweight="bold")
+    ax.set_title("Energy Consumption - October 2021", fontsize=18, fontweight="bold")
     ax.grid(False)
     ax.xaxis.set_major_locator(plt.MaxNLocator(24))
 
@@ -113,7 +116,7 @@ def validation_plot(
     ax.set_xlim(0, n_time_points)
     ax.tick_params(axis="both", labelsize=11)
     fig.tight_layout()
-    output_path = Path(__file__).resolve().parent / f"{csv_path.stem}_WRD_model_validation_Aug_2021.png"
+    output_path = Path(__file__).resolve().parent / f"{csv_path.stem}_WRD_model_validation_Oct_2021.png"
     fig.savefig(output_path, dpi=600)
     plt.show()
 
@@ -168,7 +171,7 @@ def energy_data_plot(energy_csv, energy_col="total_energy_kW"):
     plt.show()
 
 
-def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
+def calc_energy_costs(energy_csv, season='summer', energy_col="total_energy_kW"):
     """Calculate total energy costs for a given CSV of energy data."""
 
     def build_elec_price_summer(n):
@@ -190,9 +193,11 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
         # off peak 12 AM - 4 PM
         weekday_elec_price[0:16] = off_peak_del + off_peak_gen
         weekend_elec_price[0:16] = off_peak_del + off_peak_gen
+
         # on peak 4 PM - 9 PM
         weekday_elec_price[16:21] = on_peak_del + on_peak_gen
         weekend_elec_price[16:21] = mid_peak_del + mid_peak_gen
+ 
         # off peak 9 PM - 12 AM
         weekday_elec_price[21:24] = off_peak_del + off_peak_gen
         weekend_elec_price[21:24] = off_peak_del + off_peak_gen
@@ -237,17 +242,63 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
 
         return elec_price, peak_hours
 
+    def build_elec_price_winter(n):
+        # Delivery Pricing $/kWh
+        on_peak_del = 0
+        mid_peak_del = 0.01927
+        off_peak_del = 0.01811
+        super_off_peak_del = 0.01745
+
+        # Generation Pricing $/kWh
+        on_peak_gen = 0
+        mid_peak_gen = 0.09639
+        off_peak_gen = 0.09695
+        super_off_peak_gen = 0.05329
+
+        day_elec_price = np.ones(24)
+
+        # off peak 12 AM - 8 AM
+        day_elec_price[0:8] = off_peak_del + off_peak_gen
+        # super off peak 8 AM - 4 PM
+        day_elec_price[8:16] = super_off_peak_del + super_off_peak_gen
+        # mid peak 4 PM - 9 PM
+        day_elec_price[16:21] = mid_peak_del + mid_peak_gen
+        # off peak 9 PM - 12 AM
+        day_elec_price[21:24] = off_peak_del + off_peak_gen
+
+        total_hours = int(n)
+        if total_hours <= 0:
+            return np.array([]), []
+
+        elec_price = np.tile(day_elec_price, (total_hours + 23) // 24)[:total_hours]
+
+        # Absolute hourly indices that fall in mid-peak window (16:00-21:00).
+        peak_hours = []
+        for h in range(total_hours):
+            day_of_week = (h // 24) % 7
+            hour_of_day = h % 24
+            if 16 <= hour_of_day <= 20:
+                peak_hours.append(h)
+
+        return elec_price, peak_hours
+
+
     csv_path = Path(energy_csv)
     if not csv_path.is_absolute():
         csv_path = Path(__file__).resolve().parent / csv_path
     energy_df = pd.read_csv(csv_path)
     energy_profile = energy_df[energy_col].to_numpy()
     n = len(energy_profile)
+    print(n)
+    if season == 'summer':
+        elec_price, peak_hours = build_elec_price_summer(n)
+        fixed_demand_price = 19.94   # $/kW
+        variable_demand_price = 36.78  # $/kW
+    elif season == 'winter':
+        elec_price, peak_hours = build_elec_price_winter(n)
+        fixed_demand_price = 19.62   # $/kW
+        variable_demand_price = 10.54  # $/kW
 
-    elec_price, peak_hours = build_elec_price_summer(n)
-
-    fixed_demand_price = 19.94   # $/kW
-    variable_demand_price = 36.78  # $/kW
     month_to_week_factor = 7/30  # Average number of weeks in a month
 
     energy_cost = float((energy_profile * elec_price).sum())
@@ -273,7 +324,9 @@ def calc_energy_costs_summer(energy_csv, energy_col="total_energy_kW"):
 
 
 if __name__ == "__main__":
-    # validation_plot()
+    validation_plot(actual_energy_csv='Oct_21_kW_hourly_week.csv', train_schedule='real_operation_Oct_2021.csv')
     filename = "Oct_21_kW_hourly_week.csv"
-    energy_data_plot(filename)
-    calc_energy_costs_summer(filename)
+    # energy_data_plot(filename)
+    calc_energy_costs(filename,season='winter')
+
+    
